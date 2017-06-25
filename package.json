@@ -6,15 +6,22 @@
   "scripts": {
     "test": "mocha tests/**/*.spec.js"
   },
-  "keywords": ["b+-tree", "b-tree", "tree", "persistent", "immutable", "asynchronous"],
+  "keywords": [
+    "b+-tree",
+    "b-tree",
+    "tree",
+    "persistent",
+    "immutable",
+    "asynchronous"
+  ],
   "author": "Alastair Patrick",
   "license": "MIT",
   "devDependencies": {
     "chai": "^4.0.2",
     "lodash": "^4.17.4",
     "mocha": "^3.4.2",
+    "shelljs": "^0.7.8",
     "sinon": "^2.3.4"
   },
-  "dependencies": {
-  }
+  "dependencies": {}
 }

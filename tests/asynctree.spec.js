@@ -17,7 +17,7 @@ class TestStore {
   read(ptr) {
     if (!has.call(this.data, ptr))
       return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
-    return Promise.resolve().then(() => cloneDeep(this.data[ptr]));
+    return Promise.resolve(this.data[ptr]);
   }
 
   write(node) {
@@ -910,6 +910,101 @@ describe("AsyncTree", function() {
           [13, 13],
           [15, 15],
           [16, 16],
+        ]);
+      });
+    })
+  })
+
+
+  describe("garbage collect", function() {
+    it("iterates over all pointers", function() {
+      let results = [];
+      return deserializeTree(store, {
+        keys: [13],
+        children: [{
+          keys: [9, 11],
+          children: [{
+            keys: [1, 4],
+            values: [1, 4],
+          }, {
+            keys: [9, 10],
+            values: [9, 10],
+          }, {
+            keys: [11, 12],
+            values: [11, 12],
+          }],
+        }, {
+          keys: [16],
+          children: [{
+            keys: [13, 15],
+            values: [13, 15],
+          }, {
+            keys: [16, 20, 25],
+            values: [16, 20, 25],
+          }],
+        }],
+      }).then(ptr => {
+        return new AsyncTree({ store }, ptr);
+      }).then(tree => {
+        return tree.mark(ptr => {
+          results.push(ptr);
+          return true;
+        });
+      }).then(() => {
+        expect(results).to.deep.equal([
+          1008,
+          1006,
+          1001,
+          1002,
+          1003,
+          1007,
+          1004,
+          1005,
+        ]);
+      });
+    })
+
+    it("skips uninteresting sub-trees", function() {
+      let results = [];
+      return deserializeTree(store, {
+        keys: [13],
+        children: [{
+          keys: [9, 11],
+          children: [{
+            keys: [1, 4],
+            values: [1, 4],
+          }, {
+            keys: [9, 10],
+            values: [9, 10],
+          }, {
+            keys: [11, 12],
+            values: [11, 12],
+          }],
+        }, {
+          keys: [16],
+          children: [{
+            keys: [13, 15],
+            values: [13, 15],
+          }, {
+            keys: [16, 20, 25],
+            values: [16, 20, 25],
+          }],
+        }],
+      }).then(ptr => {
+        return new AsyncTree({ store }, ptr);
+      }).then(tree => {
+        return tree.mark(ptr => {
+          results.push(ptr);
+          return ptr !== 1001;
+        });
+      }).then(() => {
+        expect(results).to.deep.equal([
+          1008,
+          1006,
+          1001,
+          1007,
+          1004,
+          1005,
         ]);
       });
     })
