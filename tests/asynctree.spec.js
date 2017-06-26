@@ -2,41 +2,69 @@
 
 const { expect } = require("chai");
 const sinon = require("sinon");
-const cloneDeep = require("lodash/cloneDeep");
 
-const { AsyncTree } = require("..");
+const { AsyncTree, PTR } = require("..");
 
 const has = Object.prototype.hasOwnProperty;
 
 class TestStore {
   constructor() {
-    this.data = {};
+    this.nodes = {};
+    this.pending = new Set();
     this.ptr = 1000;
   }
 
   read(ptr) {
-    if (!has.call(this.data, ptr))
+    if (!has.call(this.nodes, ptr))
       return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
-    return Promise.resolve(this.data[ptr]);
+    return Promise.resolve(JSON.parse(JSON.stringify(this.nodes[ptr])));
   }
 
-  write(node) {
-    let ptr = ++this.ptr;
-    this.data[ptr] = node;
-    return ptr;
+  beginWrite(node) {
+    let ptr;
+    if (has.call(node, PTR)) {
+      ptr = node[PTR];
+      if (this.nodes[ptr] !== node)
+        throw new Error(`Node/pointer mismatch for '${ptr}'.`);
+    } else {
+      ptr = ++this.ptr;
+    }
+    if (this.pending.has(ptr))
+      throw new Error(`Already began writing '${ptr}'.`);
+    this.pending.add(ptr);
+    node[PTR] = ptr;
+    this.nodes[ptr] = node;
+  }
+
+  endWrite(node) {
+    if (!has.call(node, PTR))
+      throw new Error(`Node '${node}' does not have a pointer.`);
+    let ptr = node[PTR];
+    this.pending.delete(ptr);
+    this.nodes[ptr] = JSON.parse(JSON.stringify(this.nodes[ptr]));
+  }
+
+  check() {
+    if (this.pending.size)
+      throw new Error(`Pending writes: ${Array.from(this.pending.keys())}.`);
   }
 }
 
 const deserializeTree = (store, json) => {
   let node = Object.assign({}, json);
   
-  if (!has.call(node, "children"))
-    return Promise.resolve(store.write(node));
+  if (!has.call(node, "children")) {
+    store.beginWrite(node);
+    store.endWrite(node);
+    return Promise.resolve(node[PTR]);
+  }
 
   let children = json.children.map(c => deserializeTree(store, c));
   return Promise.all(children).then(children => {
     node.children = children;
-    return Promise.resolve(store.write(node));
+    store.beginWrite(node);
+    store.endWrite(node);
+    return Promise.resolve(node[PTR]);
   });
 }
 
@@ -61,6 +89,10 @@ describe("AsyncTree", function() {
   beforeEach(function() {
     store = new TestStore();
   })
+
+  afterEach(function() {
+    store.check();
+  });
 
   describe("round trips", function() {
     it("unit height tree", function() {

@@ -8,13 +8,12 @@ const read = (store, ptr) => {
   return store.read(ptr);
 }
 
-const write = (store, node) => {
-  if (has.call(node, PTR))
-    return;
-    
-  let ptr = store.write(node);
-  node[PTR] = ptr;
-  return ptr;
+const beginWrite = (store, node) => {
+  return store.beginWrite(node);
+}
+
+const endWrite = (store, node) => {
+  return store.endWrite(node);
 }
 
 // When the size of a node is equal to a tree's order, it is the smallest allowable size.
@@ -80,7 +79,9 @@ class AsyncTree {
         keys: [],
         values: [],
       };
-      rootPtr = write(this.store, node);
+      beginWrite(this.store, node);
+      endWrite(this.store, node);
+      rootPtr = node[PTR];
     }
 
     this.rootPtr = rootPtr;
@@ -127,10 +128,13 @@ class AsyncTree {
       children: [this.rootPtr],
     };
     return this.set_(key, value, operation, dummyRoot).then(({ node }) => {
-      if (dummyRoot.children.length === 1)
+      if (dummyRoot.children.length === 1) {
         return this.clone(dummyRoot.children[0]);
-      else
+      } else {
+        beginWrite(this.store, node);
+        endWrite(this.store, node);
         return this.clone(node[PTR]);
+      }
     });
   }
 
@@ -141,7 +145,7 @@ class AsyncTree {
       return read(this.store, node.children[idx]).then(child => {
         return this.set_(key, value, operation, child);
       }).then(({ node: child, idx: childIdx }) => {
-        write(this.store, node);
+        beginWrite(this.store, child);
         node.children[idx] = child[PTR];
 
         let sibling, newKey;
@@ -166,16 +170,18 @@ class AsyncTree {
           }
 
           child.keys = child.keys.slice(0, this.order);
-          write(this.store, sibling);
 
           node.keys.splice(idx, 0, newKey);
+
+          beginWrite(this.store, sibling);
+          endWrite(this.store, sibling);
           node.children.splice(idx, 1, child[PTR], sibling[PTR]);
         }
 
+        endWrite(this.store, child);
         return { node, idx };
       });
     } else {
-      write(this.store, node);
       if (cmp === 0)  {
         if (operation === "insert")
           throw new Error(`Key '${key}' already in tree.`);
@@ -202,6 +208,8 @@ class AsyncTree {
       if (node.children && node.children.length === 1) {
         return this.clone(node.children[0]);
       } else {
+        beginWrite(this.store, node);
+        endWrite(this.store, node);
         return this.clone(node[PTR]);
       }
     });
@@ -214,7 +222,7 @@ class AsyncTree {
       return read(this.store, node.children[idx]).then(child => {
         return this.delete_(key, child);
       }).then(({ node: child, idx: childIdx }) => {
-        write(this.store, node);
+        beginWrite(this.store, child);
         node.children[idx] = child[PTR];
 
         if (nodeSize(child) < this.order) {
@@ -237,7 +245,7 @@ class AsyncTree {
 
             if (nodeSize(sibling) > this.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
-              write(this.store, sibling);
+              beginWrite(this.store, sibling);
               node.children[siblingIdx] = sibling[PTR];
 
               if (child.children) {
@@ -254,6 +262,8 @@ class AsyncTree {
                 }
                 node.keys[minIdx] = child2.keys[0];
               }
+
+              endWrite(this.store, sibling);
             } else {
               // Child is too small and its sibling is not big enough to spare any keys so merge them.
               if (child.children) {
@@ -268,15 +278,16 @@ class AsyncTree {
               node.children.splice(siblingIdx, 1);
             }
 
+            endWrite(this.store, child);
             return { node, idx };
           });
-        } else {
-          return { node, idx };
         }
+        
+        endWrite(this.store, child);
+        return { node, idx };
       });
     } else {
       if (cmp === 0) {
-        write(this.store, node);
         node.keys.splice(idx, 1);
         node.values.splice(idx, 1);
         return Promise.resolve({ node, idx });
@@ -416,4 +427,5 @@ AsyncTree.BREAK = Symbol("BREAK");
 
 module.exports = {
   AsyncTree,
+  PTR,
 };

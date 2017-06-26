@@ -1,6 +1,8 @@
 const { mkdir, mkdtemp, readFile, writeFile } = require("fs");
 const { join, relative, sep } = require("path");
 
+const { PTR } = require("./asynctree");
+
 const has = Object.prototype.hasOwnProperty;
 
 const toString36 = (n) => {
@@ -51,10 +53,13 @@ class FileStore {
     });
   }
 
-  write(node) {
+  beginWrite(node) {
     let ptr = this.nextPtr();
+    node[PTR] = ptr;
     this.nodes[ptr] = node;
-    return ptr;
+  }
+
+  endWrite(node) {
   }
 
   commit(tree) {

@@ -7,6 +7,7 @@ const sh = require("shelljs");
 const sinon = require("sinon");
 const cloneDeep = require("lodash/cloneDeep");
 
+const { PTR } = require("..");
 const { FileStore } = require("../filestore");
 
 const has = Object.prototype.hasOwnProperty;
@@ -56,21 +57,37 @@ describe("FileStore", function() {
   })
 
   it("assigns pointers to written nodes", function() {
-    let ptr1 = store.write(node1);
-    let ptr2 = store.write(node2);
+    store.beginWrite(node1);
+    let ptr1 = node1[PTR];
+    store.endWrite(node1);
+    store.beginWrite(node2);
+    let ptr2 = node2[PTR];
+    store.endWrite(node2);
     expect(ptr1).to.equal(store.sessionName + "/000000/000000");
     expect(ptr2).to.equal(store.sessionName + "/000000/000001");
   })
 
   it("can read written nodes before commit", function() {
-    let ptr = store.write(node1);
+    store.beginWrite(node1);
+    let ptr = node1[PTR];
+    store.endWrite(node1);
     return store.read(ptr).then(node => {
       expect(node).to.equal(node1);
     });
   })
 
+  it("can read written nodes before endWrite", function() {
+    store.beginWrite(node1);
+    let ptr = node1[PTR];
+    return store.read(ptr).then(node => {
+      expect(node).to.equal(node1);
+      store.endWrite(node1);
+    });
+  })
+
   it("writes written nodes to files on commit", function() {
-    let ptr1 = store.write(node1);
+    store.beginWrite(node1);
+    store.endWrite(node1);
     return store.commit(tree).then(() => {
       let commitDir = join(TEST_DIR, store.sessionName, "000000");
       let nodePath = join(commitDir, "000000");
@@ -80,7 +97,9 @@ describe("FileStore", function() {
   })
 
   it("reads written node from file after commit", function() {
-    let ptr1 = store.write(node1);
+    store.beginWrite(node1);
+    let ptr1 = node1[PTR];
+    store.endWrite(node1);
     return store.commit(tree).then(() => {
       return store.read(ptr1);
     }).then(node => {
@@ -89,7 +108,9 @@ describe("FileStore", function() {
   })
 
   it("does not rewrite nodes to files in subsequent commits", function() {
-    let ptr1 = store.write(node1);
+    store.beginWrite(node1);
+    let ptr1 = node1[PTR];
+    store.endWrite(node1);
     return store.commit(tree).then(() => {
       return store.commit(tree);
     }).then(node => {
@@ -100,7 +121,9 @@ describe("FileStore", function() {
   })
 
   it("rollback cancels writes", function() {
-    let ptr1 = store.write(node1);
+    store.beginWrite(node1);
+    let ptr1 = node1[PTR];
+    store.endWrite(node1);
     store.rollback();
     store.read(ptr1).then(() => {
       expect.fail("Did not throw");
