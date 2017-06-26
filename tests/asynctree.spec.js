@@ -21,27 +21,20 @@ class TestStore {
   }
 
   beginWrite(node) {
-    let ptr;
-    if (has.call(node, PTR)) {
-      ptr = node[PTR];
-      if (this.nodes[ptr] !== node)
-        throw new Error(`Node/pointer mismatch for '${ptr}'.`);
-    } else {
-      ptr = ++this.ptr;
-    }
-    if (this.pending.has(ptr))
+    if (this.pending.has(node))
       throw new Error(`Already began writing '${ptr}'.`);
-    this.pending.add(ptr);
+    this.pending.add(node);
+    let ptr = ++this.ptr;
     node[PTR] = ptr;
-    this.nodes[ptr] = node;
   }
 
   endWrite(node) {
     if (!has.call(node, PTR))
       throw new Error(`Node '${node}' does not have a pointer.`);
+    if (!this.pending.delete(node))
+      throw new Error(`Did not begin writing '${node}'.`);
     let ptr = node[PTR];
-    this.pending.delete(ptr);
-    this.nodes[ptr] = JSON.parse(JSON.stringify(this.nodes[ptr]));
+    this.nodes[ptr] = JSON.parse(JSON.stringify(node));
   }
 
   check() {

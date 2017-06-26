@@ -76,12 +76,13 @@ describe("FileStore", function() {
     });
   })
 
-  it("can read written nodes before endWrite", function() {
+  it("cannot read written nodes before endWrite", function() {
     store.beginWrite(node1);
     let ptr = node1[PTR];
     return store.read(ptr).then(node => {
-      expect(node).to.equal(node1);
-      store.endWrite(node1);
+      expect.fail("Did not throw");
+    }).catch(error => {
+      expect(error.code).to.equal("ENOENT");
     });
   })
 

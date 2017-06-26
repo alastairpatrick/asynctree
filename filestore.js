@@ -56,10 +56,11 @@ class FileStore {
   beginWrite(node) {
     let ptr = this.nextPtr();
     node[PTR] = ptr;
-    this.nodes[ptr] = node;
   }
 
   endWrite(node) {
+    let ptr = node[PTR];
+    this.nodes[ptr] = node;
   }
 
   commit(tree) {
