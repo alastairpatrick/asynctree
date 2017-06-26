@@ -37,6 +37,15 @@ class TestStore {
     this.nodes[ptr] = JSON.parse(JSON.stringify(node));
   }
 
+  delete(ptr) {
+    if (!has.call(this.nodes, ptr))
+      return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
+    let node = this.nodes[ptr];
+    if (this.pending.has(node))
+      throw new Error(`Still writing '${ptr}'.`);
+    delete this.nodes[ptr];
+  }
+
   check() {
     if (this.pending.size)
       throw new Error(`Pending writes: ${Array.from(this.pending.keys())}.`);

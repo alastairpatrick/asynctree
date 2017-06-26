@@ -16,6 +16,12 @@ const endWrite = (store, node) => {
   return store.endWrite(node);
 }
 
+const replaceChild = (store, container, prop, ptr) => {
+  if (container[prop] !== undefined)
+    store.delete(container[prop]);
+  container[prop] = ptr;
+}
+
 // When the size of a node is equal to a tree's order, it is the smallest allowable size.
 const nodeSize = (node) => {
   if (node.children)
@@ -146,7 +152,7 @@ class AsyncTree {
         return this.set_(key, value, operation, child);
       }).then(({ node: child, idx: childIdx }) => {
         beginWrite(this.store, child);
-        node.children[idx] = child[PTR];
+        replaceChild(this.store, node.children, idx, child[PTR]);
 
         let sibling, newKey;
         if (child.keys.length >= this.order * 2) {
@@ -175,7 +181,7 @@ class AsyncTree {
 
           beginWrite(this.store, sibling);
           endWrite(this.store, sibling);
-          node.children.splice(idx, 1, child[PTR], sibling[PTR]);
+          node.children.splice(idx + 1, 0, sibling[PTR]);
         }
 
         endWrite(this.store, child);
@@ -223,7 +229,7 @@ class AsyncTree {
         return this.delete_(key, child);
       }).then(({ node: child, idx: childIdx }) => {
         beginWrite(this.store, child);
-        node.children[idx] = child[PTR];
+        replaceChild(this.store, node.children, idx, child[PTR]);
 
         if (nodeSize(child) < this.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
@@ -246,7 +252,7 @@ class AsyncTree {
             if (nodeSize(sibling) > this.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
               beginWrite(this.store, sibling);
-              node.children[siblingIdx] = sibling[PTR];
+              replaceChild(this.store, node.children, siblingIdx, sibling[PTR]);
 
               if (child.children) {
                 push.call(child.keys, node.keys[minIdx]);
@@ -275,6 +281,7 @@ class AsyncTree {
               }
 
               node.keys.splice(minIdx, 1);
+              replaceChild(this.store, node.children, siblingIdx, undefined);
               node.children.splice(siblingIdx, 1);
             }
 
