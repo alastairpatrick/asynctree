@@ -43,7 +43,7 @@ describe("FileStore", function() {
 
     return FileStore.newSession(TEMP_DIR).then(store_ => {
       store = store_;
-      store.cacheSize = 1000000;
+      store.cacheSize = Infinity;
     });
   })
 
@@ -73,12 +73,12 @@ describe("FileStore", function() {
     expect(ptr2).to.equal(store.sessionName + "/000000/000001");
   })
 
-  it("can read written nodes before commit", function() {
+  it("can read cached written nodes before commit", function() {
     store.beginWrite(node1);
     let ptr = node1[PTR];
     store.endWrite(node1);
     return store.read(ptr).then(node => {
-      expect(node).to.equal(node1);
+      expect(node).to.equal(node1);  // not deep.equal since its the same node object as was written
     });
   })
 
@@ -118,6 +118,7 @@ describe("FileStore", function() {
       return store.read(ptr1);
     }).then(node => {
       expect(node).to.deep.equal(node1);
+      expect(node[PTR]).to.equal(ptr1);
     });
   })
 
