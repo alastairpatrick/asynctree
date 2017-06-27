@@ -5,7 +5,7 @@ const { join } = require("path");
 const sh = require("shelljs");
 const sinon = require("sinon");
 
-const { AsyncTree, PTR } = require("..");
+const { AsyncTree, PTR, cloneNode } = require("..");
 const { FileStore } = require("../filestore");
 
 const TEMP_DIR = join(__dirname, "temp");
@@ -22,7 +22,7 @@ class TestStore {
   read(ptr) {
     if (!has.call(this.nodes, ptr))
       return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
-    let node = JSON.parse(JSON.stringify(this.nodes[ptr]));
+    let node = cloneNode(this.nodes[ptr]);
     node[PTR] = ptr;
     return Promise.resolve(node);
   }
@@ -41,7 +41,7 @@ class TestStore {
     if (!this.pending.delete(node))
       throw new Error(`Did not begin writing '${node}'.`);
     let ptr = node[PTR];
-    this.nodes[ptr] = JSON.parse(JSON.stringify(node));
+    this.nodes[ptr] = cloneNode(node);
   }
 
   delete(ptr) {
@@ -96,8 +96,19 @@ const testStoreFactory = () => {
   return Promise.resolve(new TestStore());
 }
 
+testStoreFactory.after = (store) => {
+  store.check();
+  return Promise.resolve();
+}
+
 const fileStoreFactory = () => {
   return FileStore.newSession(TEMP_DIR);
+}
+
+fileStoreFactory.after = (store) => {
+  return store.rollback().then(() => {
+    sh.rm("-rf", join(TEMP_DIR, store.sessionName));
+  });
 }
 
 [testStoreFactory, fileStoreFactory].forEach(factory => {
@@ -109,14 +120,7 @@ const fileStoreFactory = () => {
     })
 
     afterEach(function() {
-      if (typeof this.store.check === "function")
-        this.store.check();
-      
-      if (typeof this.store.rollback === "function") {
-        return this.store.rollback().then(() => {
-          sh.rm("-rf", join(TEMP_DIR, this.store.sessionName));
-        });
-      }
+      return factory.after(this.store);
     });
 
     describe("round trips", function() {
@@ -221,22 +225,30 @@ const fileStoreFactory = () => {
       it("exception on attempt to add key that already exists", function() {
         let tree = new AsyncTree({ store: this.store });
         return tree.insert(1, 30).then(tree => {
-          return tree.insert(1, 10);
-        }).then(() => {
-          expect.fail("Did not throw");
-        }).catch(error => {
-          expect(error).to.match(/'1'/);
+          return tree.insert(1, 10).then(() => {
+            expect.fail("Did not throw");
+          }).catch(error => {
+            expect(error).to.match(/'1'/);
+
+            return tree.get(1).then(value => {
+              expect(value).to.equal(30);
+            });
+          });
         });
       })
 
       it("exception on attempt to update key that does not exist", function() {
         let tree = new AsyncTree({ store: this.store });
         return tree.insert(2, 20).then(tree => {
-          return tree.update(1, 10);
-        }).then(() => {
-          expect.fail("Did not throw");
-        }).catch(error => {
-          expect(error).to.match(/'1'/);
+          return tree.update(1, 10).then(() => {
+            expect.fail("Did not throw");
+          }).catch(error => {
+            expect(error).to.match(/'1'/);
+
+            return tree.get(2).then(value => {
+              expect(value).to.equal(20);
+            });
+          });
         });
       })
 
@@ -498,11 +510,15 @@ const fileStoreFactory = () => {
       it("throws exception if does not exist", function() {
         let tree = new AsyncTree({ store: this.store });
         return tree.insert(1, 10).then(tree => {
-          return tree.delete(2);
-        }).then(tree => {
-          expect.fail("Did not throw");
-        }).catch(error => {
-          expect(error).to.match(/'2'/);
+          return tree.delete(2).then(tree => {
+            expect.fail("Did not throw");
+          }).catch(error => {
+            expect(error).to.match(/'2'/);
+
+            return tree.get(1).then(value => {
+              expect(value).to.equal(10);
+            });
+          });
         });
       })
 
@@ -768,6 +784,56 @@ const fileStoreFactory = () => {
       })
     })
 
+
+    describe("bulk", function() {
+      it("change", function() {
+        return deserializeTree(this.store, {
+          keys: [16],
+          children: [{
+            keys: [1, 4, 9],
+            values: [1, 4, 9],
+          }, {
+            keys: [16, 25],
+            values: [16, 25],
+          }],
+        }).then(ptr => {
+          return new AsyncTree({ store: this.store }, ptr);
+        }).then(tree => {
+          tree.order = 2;
+          return tree.bulk([
+            [20, 20],
+            [13, 13],
+            [15, 15],
+            [10, 10],
+            [11, 11],
+            [12, 12],
+            [13],  // was inserted earlier
+            [15],  // was inserted earlier
+            [1],
+          ]);
+        }).then(tree => {
+          return serializeTree(this.store, tree.rootPtr);
+        }).then(tree => {
+          expect(tree).to.deep.equal({
+            children: [{
+                keys: [4, 9],
+                values: [4, 9],
+              }, {
+                keys: [10, 11],
+                values: [10, 11],
+              }, {
+                keys: [12, 16],
+                values: [12, 16],
+              }, {
+                keys: [20, 25],
+                values: [20, 25],
+              },
+            ],
+            keys: [10, 12, 20],
+          });
+        });
+      })
+    })
 
     describe("query", function() {
       it("gets particular record", function() {

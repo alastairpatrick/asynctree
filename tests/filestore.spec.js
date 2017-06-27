@@ -78,7 +78,9 @@ describe("FileStore", function() {
     let ptr = node1[PTR];
     store.endWrite(node1);
     return store.read(ptr).then(node => {
-      expect(node).to.equal(node1);  // not deep.equal since its the same node object as was written
+      expect(node).to.deep.equal(node1);
+      expect(node[PTR]).to.equal(ptr);
+      expect(node).to.not.equal(node1);
     });
   })
 

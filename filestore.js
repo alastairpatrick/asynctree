@@ -1,7 +1,7 @@
 const { mkdir, mkdtemp, readdir, readFile, unlink, writeFile } = require("fs");
 const { join, relative, sep } = require("path");
 
-const { PTR } = require("./asynctree");
+const { cloneNode, PTR } = require("./asynctree");
 
 const MUST_WRITE = Symbol("MUST_WRITE");
 
@@ -62,12 +62,12 @@ class FileStore {
     let node = this.cache.get(ptr);
     if (node !== undefined) {
       this.cache_(node);
-      return Promise.resolve(node);      
+      return Promise.resolve(cloneNode(node));      
     }
 
     let nodePromise = this.writing.get(ptr);
     if (nodePromise !== undefined)
-      return Promise.resolve(nodePromise.node);      
+      return Promise.resolve(cloneNode(nodePromise.node));      
 
     let path = join(this.dir, ptr);
     return new Promise((resolve, reject) => {
