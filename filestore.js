@@ -11,10 +11,6 @@ const toString36 = (n) => {
   return ("000000" + n.toString(36)).slice(-6);
 }
 
-const transactionDir = (dir, sessionName, transaction) => {
-  return join(dir, sessionName, toString36(transaction));
-}
-
 const makeDir = (dir) => {
   return new Promise((resolve, reject) => {
     mkdir(dir, (error) => {
@@ -30,17 +26,15 @@ class FileStore {
   constructor(dir, sessionName) {
     this.dir = dir;
     this.sessionName = sessionName;
-    this.transaction = 0;
-    this.transactionPrefix = this.sessionName + "/" + toString36(this.transaction);
     this.nodeIdx = 0;
     this.cache = new Map();
     this.writing = new Map();
-    this.transactionPromise = Promise.resolve();
+    this.syncPromise = Promise.resolve();
     this.cacheSize = 12;
   }
 
   nextPtr() {
-    return this.transactionPrefix + "/" + toString36(this.nodeIdx++);
+    return this.sessionName + "/" + toString36(this.nodeIdx++);
   }
 
   static newSession(dir) {
@@ -54,7 +48,7 @@ class FileStore {
     }).then(sessionDir => {
       let sessionName = relative(dir, sessionDir);
       let store = new FileStore(dir, sessionName);
-      return makeDir(transactionDir(dir, sessionName, store.transaction)).then(() => store);
+      return store;
     });
   }
 
@@ -104,11 +98,6 @@ class FileStore {
         return;
     }
 
-    // The tree will delete nodes from prior transactions. It is the responsibility of the store to delete these
-    // nodes from its transaction local cache but not from storage visible to other transactions, i.e. the file system.
-    if (ptr.substring(0, this.transactionPrefix.length) !== this.transactionPrefix)
-      return;
-
     // If the node is in the process of writing to a file, chase the write with a delete. Otherwise, delete immediately.
     let path = join(this.dir, ptr);
     let deleteFn = (resolve, reject) => {
@@ -125,7 +114,7 @@ class FileStore {
       nodePromise.node = undefined;
       nodePromise.promise = nodePromise.promise.then(() => new Promise(deleteFn));
     } else {
-      this.transactionPromise = Promise.all([new Promise(deleteFn), this.transactionPromise]);
+      this.syncPromise = Promise.all([new Promise(deleteFn), this.syncPromise]);
     }
   }
 
@@ -162,63 +151,22 @@ class FileStore {
     this.writing.set(ptr, { node, promise });
   }
 
-  commit(tree) {
+  flush() {
     for (let [ptr, node] of this.cache) {
       if (node[MUST_WRITE])
         this.writeFile_(node);
     }
 
-    let promises = [this.transactionPromise];
+    let promises = [this.syncPromise];
     for (let [ptr, nodePromise] of this.writing) {
       promises.push(nodePromise.promise);
     }
 
-    ++this.transaction;
-    this.transactionPrefix = this.sessionName + "/" + toString36(this.transaction);
-    this.nodeIdx = 0;
-    this.cache = new Map();
-    this.writing = new Map();
-    this.transactionPromise = Promise.resolve();
-    promises.push(makeDir(transactionDir(this.dir, this.sessionName, this.transaction)));
+    this.cache.clear();
+    this.writing.clear();
+    this.syncPromise = Promise.resolve();
 
     return Promise.all(promises);
-  }
-
-  rollback() {
-    let promises = [this.transactionPromise];
-    for (let [ptr, nodePromise] of this.writing) {
-      promises.push(nodePromise.promise);
-    }
-    return Promise.all(promises).then(() => {
-      let dir = transactionDir(this.dir, this.sessionName, this.transaction);
-
-      this.nodeIdx = 0;
-      this.cache = new Map();
-      this.writing = new Map();
-      this.transactionPromise = Promise.resolve();
-
-      return new Promise((resolve, reject) => {
-        readdir(dir, (error, files) => {
-          if (error)
-            reject(error);
-          else
-            resolve(files);
-        });
-      }).then(files => {
-        let promises = [];
-        files.forEach(file => {
-          promises.push(new Promise((resolve, reject) => {
-            unlink(join(dir, file), (error) => {
-              if (error)
-                reject(error);
-              else
-                resolve();
-            });
-          }));
-        });
-        return Promise.all(promises);
-      })
-    });
   }
 }
 

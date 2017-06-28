@@ -5,7 +5,7 @@ const { join } = require("path");
 const sh = require("shelljs");
 const sinon = require("sinon");
 
-const { AsyncTree, PTR, cloneNode } = require("..");
+const { AsyncTree, PTR, Transaction, cloneNode } = require("..");
 const { FileStore } = require("../filestore");
 
 const TEMP_DIR = join(__dirname, "temp");
@@ -106,7 +106,7 @@ const fileStoreFactory = () => {
 }
 
 fileStoreFactory.after = (store) => {
-  return store.rollback().then(() => {
+  return store.flush().then(() => {
     sh.rm("-rf", join(TEMP_DIR, store.sessionName));
   });
 }
@@ -1034,6 +1034,85 @@ fileStoreFactory.after = (store) => {
             [15, 15],
             [16, 16],
           ]);
+        });
+      })
+    })
+
+
+    describe("transaction", function() {
+      it("atomically commits", function() {
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          tree.order = 2;
+          return tree.atomically(() => tree.insert(1, 1));
+        }).then(tree => {
+          return serializeTree(this.store, tree.rootPtr);
+        }).then(tree => {
+          expect(tree).to.deep.equal({
+            keys: [1],
+            values: [1],
+          });
+        });
+      })
+
+      it("atomically rolls back on rejected promise", function() {
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          tree.order = 2;
+          return tree.atomically(() => {
+            return tree.insert(1, 1).then(() => {
+              return Promise.reject(new Error("Spoon error"));
+            });
+          });
+        }).then(() => {
+          expect.fail("Did not fail");
+        }).catch(error => {
+          expect(error).to.match(/Spoon error/);
+        });
+      })
+
+      it("atomically rolls back on exception", function() {
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          tree.order = 2;
+          return tree.atomically(() => {
+            throw new Error("Spoon error");
+          });
+        }).then(() => {
+          expect.fail("Did not fail");
+        }).catch(error => {
+          expect(error).to.match(/Spoon error/);
+        });
+      })
+
+      it("may be nested", function() {
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          tree.order = 2;
+          return tree.atomically(tree => {
+            return tree.insert(1, 1).then(tree => {
+              return tree.atomically(tree => tree.insert(2, 2));
+            });
+          });
+        }).then(tree => {
+          return serializeTree(this.store, tree.rootPtr);
+        }).then(tree => {
+          expect(tree).to.deep.equal({
+            keys: [1, 2],
+            values: [1, 2],
+          });
         });
       })
     })
