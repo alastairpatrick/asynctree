@@ -3,7 +3,7 @@
 const stable = require("stable");
 
 const { PTR } = require("./base");
-const { Transaction } = require("./transaction");
+const { Rollback } = require("./rollback");
 
 const has = Array.prototype.hasOwnProperty;
 
@@ -102,26 +102,26 @@ class AsyncTree {
 
   atomically_(fn, context) {
     let parent = storeTransactions.get(this.store);
-    let transaction = new Transaction(this.store, parent);
-    storeTransactions.set(this.store, transaction);
+    let rollback = new Rollback(this.store, parent);
+    storeTransactions.set(this.store, rollback);
 
     let rootPtr = this.rootPtr;
     this.rootPtr = undefined;
     try {
-      return Promise.resolve(fn.call(context, transaction, rootPtr)).then(rootPtr => {
+      return Promise.resolve(fn.call(context, rollback, rootPtr)).then(rootPtr => {
         this.rootPtr = rootPtr;
         storeTransactions.set(this.store, parent);
-        transaction.commit();
+        rollback.commit();
       }).catch(error => {
         this.rootPtr = rootPtr;
         storeTransactions.set(this.store, parent);
-        transaction.rollback();
+        rollback.rollback();
         throw error;      
       });
     } catch (error) {
       this.rootPtr = rootPtr;
       storeTransactions.set(this.store, parent);
-      transaction.rollback();
+      rollback.rollback();
       throw error;      
     }
   }

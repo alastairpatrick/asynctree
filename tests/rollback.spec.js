@@ -3,7 +3,7 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const { PTR, Transaction, cloneNode } = require("..");
+const { PTR, Rollback, cloneNode } = require("..");
 
 const has = Object.prototype.hasOwnProperty;
 
@@ -54,10 +54,10 @@ class TestStore {
   }
 }
 
-describe("Transaction", function() {
+describe("Rollback", function() {
   beforeEach(function() {
     this.store = new TestStore();
-    this.transaction = new Transaction(this.store);
+    this.transaction = new Rollback(this.store);
   })
 
   it("reads store", function() {
@@ -97,73 +97,35 @@ describe("Transaction", function() {
     expect(this.store.nodes[1]).to.deep.equal(node);
   })
 
-  it("may not commit ended transaction", function() {
+  it("only rolls back changes since last commit", function() {
+    let node1 = { keys: [1], values: [1] };
+    this.transaction.beginWrite(node1);
+    let ptr1 = node1[PTR];
+    this.transaction.endWrite(node1);
+    expect(this.store.nodes[ptr1]).to.deep.equal(node1);
+
     this.transaction.commit();
-    expect(() => {
-      this.transaction.commit();
-    }).to.throw(/ended/);
-  })
 
-  it("may not rollback ended transaction", function() {
+    let node2 = { keys: [2], values: [2] };
+    this.transaction.beginWrite(node2);
+    let ptr2 = node2[PTR];
+    this.transaction.endWrite(node2);
+    expect(this.store.nodes[ptr1]).to.deep.equal(node1);
+    expect(this.store.nodes[ptr2]).to.deep.equal(node2);
+
     this.transaction.rollback();
-    expect(() => {
-      this.transaction.rollback();
-    }).to.throw(/ended/);
+    expect(this.store.nodes[ptr1]).to.deep.equal(node1);
+    expect(this.store.nodes[ptr2]).to.be.undefined;
   })
 
-  describe("nested", function() {
-    beforeEach(function() {
-      this.childTransaction = new Transaction(this.store, this.transaction);
-    })
-
-    it("increases children count of parent", function() {
-      expect(this.transaction.children).to.equal(1);
-      expect(this.childTransaction.children).to.equal(0);
-    })
-
-    it("committing ends child transaction", function() {
-      this.childTransaction.commit();
-      expect(this.transaction.children).to.equal(0);
-      this.transaction.commit();
-    })
-
-    it("rolling back ends child transaction", function() {
-      this.childTransaction.rollback();
-      expect(this.transaction.children).to.equal(0);
-      this.transaction.rollback();
-    })
-
-    it("error on attempt to commit parent transaction before child", function() {
-      expect(() => {
-        this.transaction.rollback();
-      }).to.throw(/child transaction/);
-    })
-
-    it("error on attempt to rollback parent transaction before child", function() {
-      expect(() => {
-        this.transaction.rollback();
-      }).to.throw(/child transaction/);
-    })
-
-    it("deletes nodes written by parent transaction when commiting child transaction", function() {
-      let node = { keys: [1], values: [1] };
-      this.transaction.beginWrite(node);
-      let ptr = node[PTR];
-      this.transaction.endWrite(node);
-      expect(this.store.nodes[ptr]).to.deep.equal(node);
-
-      this.childTransaction.delete(ptr);
-      expect(this.store.nodes[ptr]).to.deep.equal(node);
-
-      this.childTransaction.commit();
-      expect(this.store.nodes[ptr]).to.be.undefined;
-    })
-
-    it("transaction must use same store as parent", function() {
-      expect(() => {
-        new Transaction(new TestStore(), this.transaction);
-      }).to.throw(/mismatch/);
-    })
-
+  it("may not rollback twice", function() {
+    let node = { keys: [1], values: [1] };
+    this.transaction.beginWrite(node);
+    let ptr = node[PTR];
+    this.transaction.endWrite(node);
+    expect(this.store.nodes[ptr]).to.deep.equal(node);
+    this.transaction.rollback();
+    this.transaction.rollback();
+    expect(this.store.nodes[ptr]).to.be.undefined;
   })
 })
