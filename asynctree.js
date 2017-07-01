@@ -7,9 +7,6 @@ const { Rollback } = require("./rollback");
 
 const has = Array.prototype.hasOwnProperty;
 
-// TODO: do something else
-const storeTransactions = new WeakMap();
-
 const replaceChild = (container, prop, ptr, tx) => {
   let oldPtr = container[prop];
   if (oldPtr !== undefined)
@@ -101,26 +98,21 @@ class AsyncTree {
   }
 
   atomically_(fn, context) {
-    let parent = storeTransactions.get(this.store);
-    let rollback = new Rollback(this.store, parent);
-    storeTransactions.set(this.store, rollback);
+    let rollback = new Rollback(this.store);
 
     let rootPtr = this.rootPtr;
     this.rootPtr = undefined;
     try {
       return Promise.resolve(fn.call(context, rollback, rootPtr)).then(rootPtr => {
         this.rootPtr = rootPtr;
-        storeTransactions.set(this.store, parent);
         rollback.commit();
       }).catch(error => {
         this.rootPtr = rootPtr;
-        storeTransactions.set(this.store, parent);
         rollback.rollback();
         throw error;      
       });
     } catch (error) {
       this.rootPtr = rootPtr;
-      storeTransactions.set(this.store, parent);
       rollback.rollback();
       throw error;      
     }
