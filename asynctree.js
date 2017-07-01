@@ -100,31 +100,26 @@ class AsyncTree {
     this.rootPtr = rootPtr;
   }
 
-  /**
-   * Clones the tree, optionally changing the root node.
-   * @param {*} [rootPtr] Pointer to new root node.
-   * @returns {AsyncTree} The cloned tree.
-   */
-  clone(rootPtr=this.rootPtr) {
-    return new AsyncTree(this, rootPtr);
-  }
-
-  atomically(fn, context) {
+  atomically_(fn, context) {
     let parent = storeTransactions.get(this.store);
     let transaction = new Transaction(this.store, parent);
     storeTransactions.set(this.store, transaction);
 
+    let rootPtr = this.rootPtr;
+    this.rootPtr = undefined;
     try {
-      return Promise.resolve(fn.call(context, this, transaction)).then(result => {
+      return Promise.resolve(fn.call(context, transaction, rootPtr)).then(rootPtr => {
+        this.rootPtr = rootPtr;
         storeTransactions.set(this.store, parent);
         transaction.commit();
-        return result;
       }).catch(error => {
+        this.rootPtr = rootPtr;
         storeTransactions.set(this.store, parent);
         transaction.rollback();
         throw error;      
       });
     } catch (error) {
+      this.rootPtr = rootPtr;
       storeTransactions.set(this.store, parent);
       transaction.rollback();
       throw error;      
@@ -158,24 +153,22 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   set(key, value, type) {
-    return this.atomically((tree, tx) => this.set_(key, value, type, tx));
+    return this.atomically_((tx, rootPtr) => this.set_(key, value, type, tx, rootPtr));
   }
 
-  set_(key, value, type, tx) {
+  set_(key, value, type, tx, rootPtr) {
     let dummyRoot = {
       keys: [],
-      children: [this.rootPtr],
+      children: [rootPtr],
     };
     return this.setSubTree_(key, value, dummyRoot, type, tx).then(({ node }) => {
-      let tree;
       if (dummyRoot.children.length === 1) {
-        tree = this.clone(dummyRoot.children[0]);
+        return dummyRoot.children[0];
       } else {
         tx.beginWrite(node);
         tx.endWrite(node);
-        tree = this.clone(node[PTR]);
+        return node[PTR];
       }
-      return tree;
     });
   }
 
@@ -243,22 +236,20 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   delete(key) {
-    return this.atomically((tree, tx) => this.delete_(key, tx));
+    return this.atomically_((tx, rootPtr) => this.rootPtr = this.delete_(key, tx, rootPtr));
   }
 
-  delete_(key, tx) {
-    return tx.read(this.rootPtr).then(node => {
+  delete_(key, tx, rootPtr) {
+    return tx.read(rootPtr).then(node => {
       return this.deleteSubTree_(key, node, tx);
     }).then(({ node, idx }) => {
-      let tree;
       if (node.children && node.children.length === 1) {
-        tree = this.clone(node.children[0]);
+        return node.children[0];
       } else {
         tx.beginWrite(node);
         tx.endWrite(node);
-        tree = this.clone(node[PTR]);
+        return node[PTR];
       }
-      return tree;
     });
   }
 
@@ -351,20 +342,20 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   bulk(items) {
-    return this.atomically((tree, tx) => this.bulk_(items, tx));
+    return this.atomically_((tx, rootPtr) => this.bulk_(items, tx, rootPtr));
   }
 
-  bulk_(items, tx) {
+  bulk_(items, tx, rootPtr) {
     // Sorting is optional but makes node caching by the backing store more effective. Sort must be stable,
     // otherwise operations on the same key could be reordered.
     items = stable(items, (a, b) => this.cmp(a[0], b[0]));
     
-    let chain = Promise.resolve(this);
+    let chain = Promise.resolve(rootPtr);
     items.forEach(item => {
       if (item.length === 1)
-        chain = chain.then(tree => tree.delete_(item[0], tx));
+        chain = chain.then(rootPtr => this.delete_(item[0], tx, rootPtr));
       else
-        chain = chain.then(tree => tree.set_(item[0], item[1], item[2], tx));
+        chain = chain.then(rootPtr => this.set_(item[0], item[1], item[2], tx, rootPtr));
     });
     return chain;
   }
