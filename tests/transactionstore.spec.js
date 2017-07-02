@@ -128,4 +128,48 @@ describe("TransactionStore", function() {
     this.tx.rollback();
     expect(this.store.nodes[ptr]).to.be.undefined;
   })
+
+  describe("nested", function() {
+    beforeEach(function() {
+      this.childTx = new TransactionStore(this.tx);
+    })
+
+    it("can commit child then parent transaction", function() {
+      this.childTx.commit();
+      this.tx.commit();
+    })
+
+    it("can rollback child then parent transaction", function() {
+      this.childTx.rollback();
+      this.tx.rollback();
+    })
+
+    it("deletes nodes written by parent transaction when commiting child transaction", function() {
+      let node = { keys: [1], values: [1] };
+      this.tx.beginWrite(node);
+      let ptr = node[PTR];
+      this.tx.endWrite(node);
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+
+      this.childTx.delete(ptr);
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+
+      this.childTx.commit();
+      expect(this.store.nodes[ptr]).to.be.undefined;
+    })
+
+    it("deletes nodes written by child transaction when rolling back parent transaction", function() {
+      let node = { keys: [1], values: [1] };
+      this.childTx.beginWrite(node);
+      let ptr = node[PTR];
+      this.childTx.endWrite(node);
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+
+      this.childTx.commit();
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+
+      this.tx.rollback();
+      expect(this.store.nodes[ptr]).to.be.undefined;
+    })
+  })
 })
