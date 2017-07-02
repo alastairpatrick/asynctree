@@ -1,4 +1,4 @@
-const { mkdir, mkdtemp, readdir, readFile, unlink, writeFile } = require("fs");
+const { link, mkdir, mkdtemp, readdir, readFile, rename, unlink, writeFile } = require("fs");
 const { join, relative, sep } = require("path");
 
 const { cloneNode, PTR } = require("./asynctree");
@@ -38,12 +38,17 @@ class FileStore {
   }
 
   static newSession(dir) {
-    return new Promise((resolve, reject) => {
-      mkdtemp(dir + sep, (error, dir) => {
-        if (error)
-          reject(error);
-        else
-          resolve(dir);
+    return makeDir(join(dir, "index")).catch(error => {
+      if (error.code !== "EEXIST")
+        throw error;
+    }).then(() => {
+      return new Promise((resolve, reject) => {
+        mkdtemp(dir + sep, (error, dir) => {
+          if (error)
+            reject(error);
+          else
+            resolve(dir);
+        });
       });
     }).then(sessionDir => {
       let sessionName = relative(dir, sessionDir);
@@ -167,6 +172,35 @@ class FileStore {
     this.syncPromise = Promise.resolve();
 
     return Promise.all(promises);
+  }
+
+  commit(ptr, name) {
+    return this.flush().then(() => {
+      let nodePath = join(this.dir, ptr);
+      let rootPath = join(this.dir, "index", name);
+      let tempPath = join(this.dir, this.nextPtr());
+      return new Promise((resolve, reject) => {
+        link(nodePath, tempPath, (error) => {
+          if (error)
+            reject(error);
+          else
+            resolve();
+        });
+      }).then(() => {
+        // This is intended to atomically rename over any existing root already committed with same name.
+        return new Promise((resolve, reject) => {
+          rename(tempPath, rootPath, (error) => {
+            if (error)
+              reject(error);
+            else
+              resolve();
+          });
+        }).catch(error => {
+          unlink(tempPath);
+          throw error;
+        });
+      });
+    });
   }
 }
 

@@ -48,7 +48,7 @@ describe("FileStore", function() {
 
   afterEach(function() {
     return store.flush().then(() => {
-      sh.rm("-rf", join(TEMP_DIR, store.sessionName));
+      sh.rm("-rf", join(TEMP_DIR, "*"));
     });
   });
 
@@ -56,6 +56,11 @@ describe("FileStore", function() {
     let sessionDir = join(TEMP_DIR, store.sessionName);
     expect(statSync(sessionDir).isDirectory()).to.be.true;
     expect(readdirSync(sessionDir)).to.deep.equal([]);
+  })
+
+  it("creates index directrory", function() {
+    let indexDir = join(TEMP_DIR, "index");
+    expect(statSync(indexDir).isDirectory()).to.be.true;
   })
 
   it("assigns pointers to written nodes", function() {
@@ -210,6 +215,26 @@ describe("FileStore", function() {
     expect(store.writing.size).to.equal(1);
     return store.writing.get(ptr1).promise.then(() => {
       expect(readdirSync(join(TEMP_DIR, store.sessionName))).to.deep.equal([]);
+    });
+  })
+
+  it("commits root node", function() {
+    store.beginWrite(node1);
+    store.endWrite(node1);
+    return store.commit(node1[PTR], "myroot").then(() => {
+      let nodePath = join(TEMP_DIR, "index", "myroot");
+      expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(node1);
+    });
+  })
+
+  it("commits root node over existing", function() {
+    store.beginWrite(node1);
+    store.endWrite(node1);
+    return store.commit(node1[PTR], "myroot").then(() => {
+      return store.commit(node1[PTR], "myroot").then(() => {
+        let nodePath = join(TEMP_DIR, "index", "myroot");
+        expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(node1);
+      });
     });
   })
 })
