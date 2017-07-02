@@ -1060,5 +1060,81 @@ fileStoreFactory.after = (store) => {
         });
       })
     })
+
+    describe("atomically", function() {
+      it("performs action", function() {
+        let tree = new AsyncTree({ store: this.store });
+        return tree.atomically(() => {
+          return tree.insert(1, 10);
+        }).then(() => {
+          return tree.get(1);
+        }).then(value => {
+          expect(value).to.equal(10);
+        });
+      })
+
+      it("performs multiple action", function() {
+        let tree = new AsyncTree({ store: this.store });
+        return tree.atomically(() => {
+          return tree.insert(1, 10).then(() => {
+            return tree.insert(2, 20);
+          });;
+        }).then(() => {
+          return tree.get(2);
+        }).then(value => {
+          expect(value).to.equal(20);
+        });
+      })
+
+      it("undoes actions on exception", function() {
+        let tree = new AsyncTree({ store: this.store });
+        return tree.atomically(() => {
+          return tree.insert(1, 10).then(() => {
+            throw new Error("Unexpected thing");
+          });
+        }).then(() => {
+          expect.fail("Did not throw");
+        }).catch(error => {
+          expect(error).to.match(/Unexpected thing/);
+          return tree.get(1);
+        }).then(value => {
+          expect(value).to.be.undefined;
+        });
+      })
+
+      it("nests", function() {
+        let tree = new AsyncTree({ store: this.store });
+        return tree.atomically(() => {
+          return tree.atomically(() => {
+            return tree.insert(1, 10);
+          });
+        }).then(() => {
+          return tree.get(1);
+        }).then(value => {
+          expect(value).to.equal(10);
+        });
+      })
+
+      it("undoes inner actions for inner exception", function() {
+        let tree = new AsyncTree({ store: this.store });
+        return tree.atomically(() => {
+          return tree.insert(1, 10).then(() => {
+            return tree.atomically(() => {
+              return tree.insert(2, 20).then(() => {
+                throw new Error("Unexpected thing");
+              });
+            }).catch(error => {
+              // Do not propagate error to outer atomically
+            });
+          });
+        }).then(value => {
+          expect(value).to.be.undefined;
+        }).then(() => {
+          return tree.get(1);
+        }).then(value => {
+          expect(value).to.equal(10);
+        });
+      })
+    })
   })
 })

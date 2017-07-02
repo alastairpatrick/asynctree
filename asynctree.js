@@ -5,6 +5,8 @@ const stable = require("stable");
 const { PTR } = require("./base");
 const { Rollback } = require("./rollback");
 
+const TransactionStore = Rollback;
+
 const has = Array.prototype.hasOwnProperty;
 
 const replaceChild = (container, prop, ptr, tx) => {
@@ -84,36 +86,40 @@ class AsyncTree {
     this.order = config.order || 1024;
     this.cmp = config.cmp || cmp;
 
+    this.tx = new TransactionStore(this.store);
+
     if (rootPtr === undefined) {
       let node = {
         keys: [],
         values: [],
       };
-      this.store.beginWrite(node);
-      this.store.endWrite(node);
+      this.tx.beginWrite(node);
+      this.tx.endWrite(node);
       rootPtr = node[PTR];
     }
 
     this.rootPtr = rootPtr;
   }
 
-  atomically_(fn, context) {
-    let rollback = new Rollback(this.store);
+  atomically(fn, context) {
+    let oldTx = this.tx;
+    let oldRootPtr = this.rootPtr;
+    this.tx = new TransactionStore(oldTx);
 
-    let rootPtr = this.rootPtr;
-    this.rootPtr = undefined;
     try {
-      return Promise.resolve(fn.call(context, rollback, rootPtr)).then(rootPtr => {
-        this.rootPtr = rootPtr;
-        rollback.commit();
+      return Promise.resolve(fn.call(context)).then(() => {
+        this.tx.commit();
+        this.tx = oldTx;
       }).catch(error => {
-        this.rootPtr = rootPtr;
-        rollback.rollback();
+        this.tx.rollback();
+        this.tx = oldTx;
+        this.rootPtr = oldRootPtr;
         throw error;      
       });
     } catch (error) {
-      this.rootPtr = rootPtr;
-      rollback.rollback();
+      this.tx.rollback();
+      this.oldTx = oldTx;
+      this.rootPtr = oldRootPtr;
       throw error;      
     }
   }
@@ -145,34 +151,35 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   set(key, value, type) {
-    return this.atomically_((tx, rootPtr) => this.set_(key, value, type, tx, rootPtr));
+    return this.atomically(() => this.set_(key, value, type));
   }
 
-  set_(key, value, type, tx, rootPtr) {
+  set_(key, value, type) {
     let dummyRoot = {
       keys: [],
-      children: [rootPtr],
+      children: [this.rootPtr],
     };
-    return this.setSubTree_(key, value, dummyRoot, type, tx).then(({ node }) => {
+    this.rootPtr = undefined;
+    return this.setSubTree_(key, value, dummyRoot, type, this.tx).then(({ node }) => {
       if (dummyRoot.children.length === 1) {
-        return dummyRoot.children[0];
+        this.rootPtr = dummyRoot.children[0];
       } else {
-        tx.beginWrite(node);
-        tx.endWrite(node);
-        return node[PTR];
+        this.tx.beginWrite(node);
+        this.tx.endWrite(node);
+        this.rootPtr = node[PTR];
       }
     });
   }
 
-  setSubTree_(key, value, node, type, tx) {
+  setSubTree_(key, value, node, type) {
     let { idx, cmp } = this.findKey_(key, node);
 
     if (node.children) {
-      return tx.read(node.children[idx]).then(child => {
-        return this.setSubTree_(key, value, child, type, tx);
+      return this.tx.read(node.children[idx]).then(child => {
+        return this.setSubTree_(key, value, child, type, this.tx);
       }).then(({ node: child, idx: childIdx }) => {
-        tx.beginWrite(child);
-        replaceChild(node.children, idx, child[PTR], tx);
+        this.tx.beginWrite(child);
+        replaceChild(node.children, idx, child[PTR], this.tx);
 
         let sibling, newKey;
         if (child.keys.length >= this.order * 2) {
@@ -199,12 +206,12 @@ class AsyncTree {
 
           node.keys.splice(idx, 0, newKey);
 
-          tx.beginWrite(sibling);
-          tx.endWrite(sibling);
+          this.tx.beginWrite(sibling);
+          this.tx.endWrite(sibling);
           node.children.splice(idx + 1, 0, sibling[PTR]);
         }
 
-        tx.endWrite(child);
+        this.tx.endWrite(child);
         return { node, idx };
       });
     } else {
@@ -228,36 +235,38 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   delete(key) {
-    return this.atomically_((tx, rootPtr) => this.rootPtr = this.delete_(key, tx, rootPtr));
+    return this.atomically(() => this.delete_(key));
   }
 
-  delete_(key, tx, rootPtr) {
-    return tx.read(rootPtr).then(node => {
-      return this.deleteSubTree_(key, node, tx);
+  delete_(key) {
+    let rootPtr = this.rootPtr;
+    this.rootPtr = undefined;
+    return this.tx.read(rootPtr).then(node => {
+      return this.deleteSubTree_(key, node, this.tx);
     }).then(({ node, idx }) => {
       if (node.children && node.children.length === 1) {
-        return node.children[0];
+        this.rootPtr = node.children[0];
       } else {
-        tx.beginWrite(node);
-        tx.endWrite(node);
-        return node[PTR];
+        this.tx.beginWrite(node);
+        this.tx.endWrite(node);
+        this.rootPtr = node[PTR];
       }
     });
   }
 
-  deleteSubTree_(key, node, tx) {
+  deleteSubTree_(key, node) {
     let { idx, cmp } = this.findKey_(key, node);
 
     if (node.children) {
-      return tx.read(node.children[idx]).then(child => {
-        return this.deleteSubTree_(key, child, tx);
+      return this.tx.read(node.children[idx]).then(child => {
+        return this.deleteSubTree_(key, child);
       }).then(({ node: child, idx: childIdx }) => {
-        tx.beginWrite(child);
-        replaceChild(node.children, idx, child[PTR], tx);
+        this.tx.beginWrite(child);
+        replaceChild(node.children, idx, child[PTR], this.tx);
 
         if (nodeSize(child) < this.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
-          return tx.read(node.children[siblingIdx]).then(sibling => {
+          return this.tx.read(node.children[siblingIdx]).then(sibling => {
             let child1, child2, push, pop, minIdx;
             if (siblingIdx < idx) {
               minIdx = siblingIdx;
@@ -275,8 +284,8 @@ class AsyncTree {
 
             if (nodeSize(sibling) > this.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
-              tx.beginWrite(sibling);
-              replaceChild(node.children, siblingIdx, sibling[PTR], tx);
+              this.tx.beginWrite(sibling);
+              replaceChild(node.children, siblingIdx, sibling[PTR], this.tx);
 
               if (child.children) {
                 push.call(child.keys, node.keys[minIdx]);
@@ -293,7 +302,7 @@ class AsyncTree {
                 node.keys[minIdx] = child2.keys[0];
               }
 
-              tx.endWrite(sibling);
+              this.tx.endWrite(sibling);
             } else {
               // Child is too small and its sibling is not big enough to spare any keys so merge them.
               if (child.children) {
@@ -305,16 +314,16 @@ class AsyncTree {
               }
 
               node.keys.splice(minIdx, 1);
-              replaceChild(node.children, siblingIdx, undefined, tx);
+              replaceChild(node.children, siblingIdx, undefined, this.tx);
               node.children.splice(siblingIdx, 1);
             }
 
-            tx.endWrite(child);
+            this.tx.endWrite(child);
             return { node, idx };
           });
         }
         
-        tx.endWrite(child);
+        this.tx.endWrite(child);
         return { node, idx };
       });
     } else {
@@ -334,20 +343,20 @@ class AsyncTree {
    * @returns {Promise} Resolves to the new tree.
    */
   bulk(items) {
-    return this.atomically_((tx, rootPtr) => this.bulk_(items, tx, rootPtr));
+    return this.atomically(() => this.bulk_(items));
   }
 
-  bulk_(items, tx, rootPtr) {
+  bulk_(items) {
     // Sorting is optional but makes node caching by the backing store more effective. Sort must be stable,
     // otherwise operations on the same key could be reordered.
     items = stable(items, (a, b) => this.cmp(a[0], b[0]));
     
-    let chain = Promise.resolve(rootPtr);
+    let chain = Promise.resolve();
     items.forEach(item => {
       if (item.length === 1)
-        chain = chain.then(rootPtr => this.delete_(item[0], tx, rootPtr));
+        chain = chain.then(() => this.delete_(item[0]));
       else
-        chain = chain.then(rootPtr => this.set_(item[0], item[1], item[2], tx, rootPtr));
+        chain = chain.then(() => this.set_(item[0], item[1], item[2]));
     });
     return chain;
   }
@@ -387,7 +396,7 @@ class AsyncTree {
    * @returns {Promise} Fulfilled after iteration has completed.
    */
   rangeEach(lower, upper, cb, context) {
-    return this.store.read(this.rootPtr).then(node => {
+    return this.tx.read(this.rootPtr).then(node => {
       return this.rangeEach_(lower, upper, cb, context, node);
     });
   }
@@ -401,7 +410,7 @@ class AsyncTree {
 
     if (node.children) {
       const processChildren = (node, i) => {
-        return this.store.read(node.children[i]).then(child => {
+        return this.tx.read(node.children[i]).then(child => {
           return this.rangeEach_(lower, upper, cb, context, child);
         }).then(result => {
           if (result == AsyncTree.BREAK)
@@ -449,7 +458,7 @@ class AsyncTree {
     if (!cb.call(context, this.rootPtr))
       return;
 
-    return this.store.read(this.rootPtr).then(node => {
+    return this.tx.read(this.rootPtr).then(node => {
       return this.mark_(cb, context, node);
     });
   }
@@ -464,7 +473,7 @@ class AsyncTree {
       if (!cb.call(context, ptr))
         return;
 
-      return this.store.read(node.children[i]).then(child => {
+      return this.tx.read(node.children[i]).then(child => {
         return this.mark_(cb, context, child);
       }).then(result => {
         ++i;
