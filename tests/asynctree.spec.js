@@ -53,6 +53,9 @@ class TestStore {
     delete this.nodes[ptr];
   }
 
+  commit(rootPtr, name) {
+  }
+
   check() {
     if (this.pending.size)
       throw new Error(`Pending writes: ${Array.from(this.pending.keys())}.`);
@@ -114,12 +117,14 @@ fileStoreFactory.after = (store) => {
 [testStoreFactory, fileStoreFactory].forEach(factory => {
   describe("AsyncTree", function() {
     beforeEach(function() {
+      this.sandbox = sinon.sandbox.create();
       return factory().then(store_ => {
         this.store = store_;
       });
     })
 
     afterEach(function() {
+      this.sandbox.restore();
       return factory.after(this.store);
     });
 
@@ -1061,7 +1066,7 @@ fileStoreFactory.after = (store) => {
       })
     })
 
-    describe("atomically", function() {
+    describe("transaction", function() {
       it("performs action", function() {
         let tree = new AsyncTree({ store: this.store });
         return tree.atomically(() => {
@@ -1133,6 +1138,64 @@ fileStoreFactory.after = (store) => {
           return tree.get(1);
         }).then(value => {
           expect(value).to.equal(10);
+        });
+      })
+
+      it("can rollback tree", function() {
+        this.sandbox.spy(this.store, "commit");
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          return tree.insert(1, 10).then(() => {
+            return tree.rollback();
+          }).then(() => {
+            return tree.get(1);
+          }).then(value => {
+            expect(value).to.be.undefined;
+            sinon.assert.notCalled(this.store.commit);
+          });
+        });
+      })
+
+      it("can commit tree", function() {
+        this.sandbox.spy(this.store, "commit");
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          return tree.insert(1, 10).then(() => {
+            return tree.commit("myroot");
+          }).then(() => {
+            return tree.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+            sinon.assert.calledOnce(this.store.commit);
+            expect(this.store.commit.getCall(0).args[1]).to.equal("myroot");
+          });
+        });
+      })
+
+      it("can commit tree and rollback", function() {
+        this.sandbox.spy(this.store, "commit");
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree = new AsyncTree({ store: this.store }, ptr);
+          return tree.insert(1, 10).then(() => {
+            return tree.commit("myroot");
+          }).then(() => {
+            return tree.insert(2, 20);
+          }).then(() => {
+            tree.rollback();
+            return tree.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+            sinon.assert.calledOnce(this.store.commit);
+          });
         });
       })
     })

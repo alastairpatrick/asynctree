@@ -482,7 +482,7 @@ class AsyncTree {
   }
 
   commit(name) {
-    this.tx.commit();
+    this.tx.commit(this.rootPtr);
     return this.store.commit(this.rootPtr, name);
   }
 
