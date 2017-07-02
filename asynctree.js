@@ -3,9 +3,7 @@
 const stable = require("stable");
 
 const { PTR } = require("./base");
-const { Rollback } = require("./rollback");
-
-const TransactionStore = Rollback;
+const { TransactionStore } = require("./transactionstore");
 
 const has = Array.prototype.hasOwnProperty;
 

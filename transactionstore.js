@@ -2,7 +2,7 @@
 
 const { PTR } = require("./base");
 
-class Rollback {
+class TransactionStore {
   constructor(store) {
     this.store = store;
     this.undos = new Set();
@@ -40,5 +40,5 @@ class Rollback {
 }
 
 module.exports = {
-  Rollback,
+  TransactionStore,
 };
