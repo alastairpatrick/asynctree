@@ -25,7 +25,7 @@ class TransactionStore {
   delete(ptr) {
     if (this.undos.delete(ptr))
       this.parent.delete(ptr);
-    else
+    else if (this.parent instanceof TransactionStore)
       this.applies.add(ptr);
   }
 
@@ -38,14 +38,11 @@ class TransactionStore {
   }
 
   commit() {
-    if (this.parent instanceof TransactionStore) {
-      for (let ptr of this.undos)
-        this.parent.undos.add(ptr);
-      for (let ptr of this.applies)
-        this.parent.delete(ptr);
-    }
+    for (let ptr of this.applies)
+      this.parent.delete(ptr);
 
     this.undos = new Set();
+    this.applies = new Set();
   }
 }
 
