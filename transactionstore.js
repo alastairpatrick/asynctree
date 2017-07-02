@@ -3,8 +3,9 @@
 const { PTR } = require("./base");
 
 class TransactionStore {
-  constructor(store) {
+  constructor(store, rootPtr) {
     this.parent = store;
+    this.rootPtr = rootPtr;
     this.undos = new Set();
     this.applies = new Set();
   }
@@ -35,12 +36,15 @@ class TransactionStore {
 
     this.undos = new Set();
     this.applies = new Set();
+
+    return this.rootPtr;
   }
 
-  commit() {
+  commit(rootPtr) {
     for (let ptr of this.applies)
       this.parent.delete(ptr);
 
+    this.rootPtr = rootPtr;
     this.undos = new Set();
     this.applies = new Set();
   }

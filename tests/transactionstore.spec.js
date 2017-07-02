@@ -57,7 +57,7 @@ class TestStore {
 describe("TransactionStore", function() {
   beforeEach(function() {
     this.store = new TestStore();
-    this.tx = new TransactionStore(this.store);
+    this.tx = new TransactionStore(this.store, 77);
   })
 
   it("reads store", function() {
@@ -73,7 +73,7 @@ describe("TransactionStore", function() {
     let ptr = node[PTR];
     this.tx.endWrite(node);
     expect(this.store.nodes[ptr]).to.deep.equal(node);
-    this.tx.rollback();
+    expect(this.tx.rollback()).to.equal(77);
     expect(this.store.nodes[ptr]).to.be.undefined;
   })
 
@@ -104,7 +104,7 @@ describe("TransactionStore", function() {
     this.tx.endWrite(node1);
     expect(this.store.nodes[ptr1]).to.deep.equal(node1);
 
-    this.tx.commit();
+    this.tx.commit(88);
 
     let node2 = { keys: [2], values: [2] };
     this.tx.beginWrite(node2);
@@ -113,7 +113,7 @@ describe("TransactionStore", function() {
     expect(this.store.nodes[ptr1]).to.deep.equal(node1);
     expect(this.store.nodes[ptr2]).to.deep.equal(node2);
 
-    this.tx.rollback();
+    expect(this.tx.rollback()).to.equal(88);
     expect(this.store.nodes[ptr1]).to.deep.equal(node1);
     expect(this.store.nodes[ptr2]).to.be.undefined;
   })

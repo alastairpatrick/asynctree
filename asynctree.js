@@ -84,7 +84,7 @@ class AsyncTree {
     this.order = config.order || 1024;
     this.cmp = config.cmp || cmp;
 
-    this.tx = new TransactionStore(this.store);
+    this.tx = new TransactionStore(this.store, rootPtr);
 
     if (rootPtr === undefined) {
       let node = {
@@ -101,23 +101,20 @@ class AsyncTree {
 
   atomically(fn, context) {
     let oldTx = this.tx;
-    let oldRootPtr = this.rootPtr;
-    this.tx = new TransactionStore(oldTx);
+    this.tx = new TransactionStore(oldTx, this.rootPtr);
 
     try {
       return Promise.resolve(fn.call(context)).then(() => {
-        this.tx.commit();
+        this.tx.commit(this.rootPtr);
         this.tx = oldTx;
       }).catch(error => {
-        this.tx.rollback();
+        this.rootPtr = this.tx.rollback();
         this.tx = oldTx;
-        this.rootPtr = oldRootPtr;
         throw error;      
       });
     } catch (error) {
-      this.tx.rollback();
+      this.rootPtr = this.tx.rollback();
       this.oldTx = oldTx;
-      this.rootPtr = oldRootPtr;
       throw error;      
     }
   }
@@ -482,6 +479,15 @@ class AsyncTree {
     }
 
     return processChildren(node, 0);
+  }
+
+  commit(name) {
+    this.tx.commit();
+    return this.store.commit(this.rootPtr, name);
+  }
+
+  rollback() {
+    this.rootPtr = this.tx.rollback();
   }
 }
 
