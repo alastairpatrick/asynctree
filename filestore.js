@@ -1,7 +1,7 @@
 const { link, mkdir, mkdtemp, readdir, readFile, rename, unlink, writeFile } = require("fs");
 const { join, relative, sep } = require("path");
 
-const { cloneNode, PTR } = require("./asynctree");
+const { cloneNode, PTR } = require("./tree");
 
 const MUST_WRITE = Symbol("MUST_WRITE");
 

@@ -72,12 +72,12 @@ const cmp = (a, b) => {
  * determines key ordering. The default comparison uses JavaScript's < and > operators and is effective for
  * e.g. strings or numbers.
  */
-class AsyncTree {
+class Tree {
   /**
    * Create a search tree.
    * @param {*} config The confioguration, which must include the backing store for the tree's nodes.
    * @param {*} [rootPtr] Pointer to the tree's root node or undefined to create an empty tree.
-   * @returns {AsyncTree} A new tree.
+   * @returns {Tree} A new tree.
    */
   constructor(config, rootPtr) {
     this.store = config.store;
@@ -408,7 +408,7 @@ class AsyncTree {
         return this.tx.read(node.children[i]).then(child => {
           return this.rangeEach_(lower, upper, cb, context, child);
         }).then(result => {
-          if (result == AsyncTree.BREAK)
+          if (result == Tree.BREAK)
             return result;
           ++i;
           if (i >= node.children.length)
@@ -425,8 +425,8 @@ class AsyncTree {
         let key = node.keys[i];
         if (this.cmp(key, upper) > 0)
           break;
-        if (cb.call(context, node.values[i], key) === AsyncTree.BREAK)
-          return AsyncTree.BREAK;
+        if (cb.call(context, node.values[i], key) === Tree.BREAK)
+          return Tree.BREAK;
       }
     }
   }
@@ -491,10 +491,10 @@ class AsyncTree {
   }
 }
 
-AsyncTree.BREAK = Symbol("BREAK");
+Tree.BREAK = Symbol("BREAK");
 
 module.exports = {
-  AsyncTree,
+  Tree,
   PTR,
   cloneNode,
 };

@@ -1,6 +1,6 @@
 "use strict";
 
-const { PTR } = require("./asynctree");
+const { PTR } = require("./tree");
 
 const has = Object.prototype.hasOwnProperty;
 
