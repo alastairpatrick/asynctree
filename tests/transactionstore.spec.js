@@ -131,7 +131,7 @@ describe("TransactionStore", function() {
 
   describe("nested", function() {
     beforeEach(function() {
-      this.childTx = new TransactionStore(this.tx);
+      this.childTx = new TransactionStore(this.tx, 77);
     })
 
     it("can commit child then parent transaction", function() {

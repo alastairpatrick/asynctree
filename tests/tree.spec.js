@@ -120,6 +120,13 @@ fileStoreFactory.after = (store) => {
       this.sandbox = sinon.sandbox.create();
       return factory().then(store_ => {
         this.store = store_;
+        let emptyNode = {
+          keys: [],
+          values: [],
+        };
+        this.store.beginWrite(emptyNode);
+        this.emptyNodePtr = emptyNode[PTR];
+        this.store.endWrite(emptyNode);
       });
     })
 
@@ -172,7 +179,7 @@ fileStoreFactory.after = (store) => {
 
 
     it("has no entries on creation", function() {
-      let tree = new Tree({ store: this.store });
+      let tree = new Tree({ store: this.store }, this.emptyNodePtr);
       return serializeTree(this.store, tree.rootPtr).then(tree => {
         expect(tree).to.deep.equal({
           keys: [],
@@ -184,7 +191,7 @@ fileStoreFactory.after = (store) => {
 
     describe("set", function() {
       it("after creation", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return serializeTree(this.store, tree.rootPtr);
         }).then(tree => {
@@ -196,7 +203,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("entries are maintained in ascending in node", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(3, 30).then(() => {
           return tree.insert(1, 10);
         }).then(() => {
@@ -212,7 +219,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("can update value associated with key", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(1, 30).then(() => {
           return tree.update(1, 10);
         }).then(() => {
@@ -228,7 +235,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("exception on attempt to add key that already exists", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(1, 30).then(() => {
           return tree.insert(1, 10).then(() => {
             expect.fail("Did not throw");
@@ -243,7 +250,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("exception on attempt to update key that does not exist", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(2, 20).then(() => {
           return tree.update(1, 10).then(() => {
             expect.fail("Did not throw");
@@ -493,7 +500,7 @@ fileStoreFactory.after = (store) => {
 
     describe("delete", function() {
       it("sole value", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return tree.delete(1);
         }).then(() => {
@@ -507,7 +514,7 @@ fileStoreFactory.after = (store) => {
       })
       
       it("throws exception if does not exist", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return tree.delete(2).then(() => {
             expect.fail("Did not throw");
@@ -830,7 +837,7 @@ fileStoreFactory.after = (store) => {
 
     describe("query", function() {
       it("gets particular record", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.get(2);
@@ -840,7 +847,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("gets returns undefined for missing record", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.get(3);
@@ -850,7 +857,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("finds only record", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.forEach((value, key) => {
@@ -864,7 +871,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("finds two record", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.insert(1, 10);
@@ -1068,7 +1075,7 @@ fileStoreFactory.after = (store) => {
 
     describe("transaction", function() {
       it("performs action", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10);
         }).then(() => {
@@ -1079,11 +1086,11 @@ fileStoreFactory.after = (store) => {
       })
 
       it("performs multiple action", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             return tree.insert(2, 20);
-          });;
+          });
         }).then(() => {
           return tree.get(2);
         }).then(value => {
@@ -1092,7 +1099,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("undoes actions on exception", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             throw new Error("Unexpected thing");
@@ -1108,7 +1115,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("nests", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.atomically(() => {
             return tree.insert(1, 10);
@@ -1121,7 +1128,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("undoes inner actions for inner exception", function() {
-        let tree = new Tree({ store: this.store });
+        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             return tree.atomically(() => {

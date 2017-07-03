@@ -80,23 +80,13 @@ class Tree {
    * @returns {Tree} A new tree.
    */
   constructor(config, rootPtr) {
-    this.store = config.store;
-    this.order = config.order || 1024;
-    this.cmp = config.cmp || cmp;
-
-    this.tx = new TransactionStore(this.store, rootPtr);
-
-    if (rootPtr === undefined) {
-      let node = {
-        keys: [],
-        values: [],
-      };
-      this.tx.beginWrite(node);
-      this.tx.endWrite(node);
-      rootPtr = node[PTR];
-    }
+    Object.assign(this, config, {
+      order: 1024,
+      cmp: cmp,
+    });
 
     this.rootPtr = rootPtr;
+    this.tx = new TransactionStore(this.store, this.rootPtr);
   }
 
   atomically(fn, context) {
