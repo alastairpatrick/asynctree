@@ -53,7 +53,7 @@ class TestStore {
     delete this.nodes[ptr];
   }
 
-  commit(rootPtr, name) {
+  commit(rootPtr) {
   }
 
   check() {
@@ -179,7 +179,7 @@ fileStoreFactory.after = (store) => {
 
 
     it("has no entries on creation", function() {
-      let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+      let tree = new Tree(this.store, this.emptyNodePtr);
       return serializeTree(this.store, tree.rootPtr).then(tree => {
         expect(tree).to.deep.equal({
           keys: [],
@@ -191,7 +191,7 @@ fileStoreFactory.after = (store) => {
 
     describe("set", function() {
       it("after creation", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return serializeTree(this.store, tree.rootPtr);
         }).then(tree => {
@@ -203,7 +203,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("entries are maintained in ascending in node", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(3, 30).then(() => {
           return tree.insert(1, 10);
         }).then(() => {
@@ -219,7 +219,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("can update value associated with key", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 30).then(() => {
           return tree.update(1, 10);
         }).then(() => {
@@ -235,7 +235,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("exception on attempt to add key that already exists", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 30).then(() => {
           return tree.insert(1, 10).then(() => {
             expect.fail("Did not throw");
@@ -250,7 +250,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("exception on attempt to update key that does not exist", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(2, 20).then(() => {
           return tree.update(1, 10).then(() => {
             expect.fail("Did not throw");
@@ -277,8 +277,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(20, 20).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -307,8 +306,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(13, 13).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -343,8 +341,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(15, 15).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -379,8 +376,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(10, 10).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -421,8 +417,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(11, 11).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -463,8 +458,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.insert(12, 12).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -500,7 +494,7 @@ fileStoreFactory.after = (store) => {
 
     describe("delete", function() {
       it("sole value", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return tree.delete(1);
         }).then(() => {
@@ -514,7 +508,7 @@ fileStoreFactory.after = (store) => {
       })
       
       it("throws exception if does not exist", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return tree.delete(2).then(() => {
             expect.fail("Did not throw");
@@ -554,8 +548,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.delete(13).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -614,8 +607,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.delete(15).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -669,8 +661,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.delete(1).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -705,8 +696,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.delete(20).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -753,8 +743,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.delete(4).then(() => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
@@ -798,8 +787,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
-          tree.order = 2;
+          let tree = new Tree(this.store, ptr, { order: 2 });
           return tree.bulk([
             [20, 20],
             [13, 13],
@@ -837,7 +825,7 @@ fileStoreFactory.after = (store) => {
 
     describe("query", function() {
       it("gets particular record", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.get(2);
@@ -847,7 +835,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("gets returns undefined for missing record", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.get(3);
@@ -857,7 +845,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("finds only record", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.forEach((value, key) => {
@@ -871,7 +859,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("finds two record", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         let results = [];
         return tree.insert(2, 20).then(() => {
           return tree.insert(1, 10);
@@ -905,7 +893,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.forEach((value, key) => {
             results.push([key, value]);
           });
@@ -943,7 +931,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.forEach((value, key) => {
             results.push([key, value]);
             if (key >= 13)
@@ -982,7 +970,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.forEach((value, key) => {
             results.push([key, value]);
             if (key >= 13)
@@ -1018,7 +1006,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.rangeEach(10, 16, (value, key) => {
             results.push([key, value]);
           });
@@ -1062,7 +1050,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.mark(ptr => {
             results.push(ptr);
             return true;
@@ -1075,7 +1063,7 @@ fileStoreFactory.after = (store) => {
 
     describe("transaction", function() {
       it("performs action", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10);
         }).then(() => {
@@ -1086,7 +1074,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("performs multiple action", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             return tree.insert(2, 20);
@@ -1099,7 +1087,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("undoes actions on exception", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             throw new Error("Unexpected thing");
@@ -1115,7 +1103,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("nests", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.atomically(() => {
             return tree.insert(1, 10);
@@ -1128,7 +1116,7 @@ fileStoreFactory.after = (store) => {
       })
 
       it("undoes inner actions for inner exception", function() {
-        let tree = new Tree({ store: this.store }, this.emptyNodePtr);
+        let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.atomically(() => {
           return tree.insert(1, 10).then(() => {
             return tree.atomically(() => {
@@ -1149,51 +1137,45 @@ fileStoreFactory.after = (store) => {
       })
 
       it("can rollback tree", function() {
-        this.sandbox.spy(this.store, "commit");
         return deserializeTree(this.store, {
           keys: [],
           values: [],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.insert(1, 10).then(() => {
             return tree.rollback();
           }).then(() => {
             return tree.get(1);
           }).then(value => {
             expect(value).to.be.undefined;
-            sinon.assert.notCalled(this.store.commit);
           });
         });
       })
 
       it("can commit tree", function() {
-        this.sandbox.spy(this.store, "commit");
         return deserializeTree(this.store, {
           keys: [],
           values: [],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.insert(1, 10).then(() => {
-            return tree.commit("myroot");
+            return tree.commit();
           }).then(() => {
             return tree.get(1);
           }).then(value => {
             expect(value).to.equal(10);
-            sinon.assert.calledOnce(this.store.commit);
-            expect(this.store.commit.getCall(0).args[1]).to.equal("myroot");
           });
         });
       })
 
       it("can commit tree and rollback", function() {
-        this.sandbox.spy(this.store, "commit");
         return deserializeTree(this.store, {
           keys: [],
           values: [],
         }).then(ptr => {
-          let tree = new Tree({ store: this.store }, ptr);
+          let tree = new Tree(this.store, ptr);
           return tree.insert(1, 10).then(() => {
-            return tree.commit("myroot");
+            return tree.commit();
           }).then(() => {
             return tree.insert(2, 20);
           }).then(() => {
@@ -1201,7 +1183,6 @@ fileStoreFactory.after = (store) => {
             return tree.get(1);
           }).then(value => {
             expect(value).to.equal(10);
-            sinon.assert.calledOnce(this.store.commit);
           });
         });
       })

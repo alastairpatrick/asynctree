@@ -2,5 +2,6 @@ module.exports = Object.assign(
   {},
   require("./base"),
   require("./transactionstore"),
-  require("./tree")
+  require("./tree"),
+  require("./treeindex")
 );

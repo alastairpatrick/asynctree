@@ -1,4 +1,4 @@
-const { link, mkdir, mkdtemp, readdir, readFile, rename, unlink, writeFile } = require("fs");
+const { mkdir, mkdtemp, readFile, rename, unlink, writeFile } = require("fs");
 const { join, relative, sep } = require("path");
 
 const { cloneNode, PTR } = require("./tree");
@@ -174,31 +174,41 @@ class FileStore {
     return Promise.all(promises);
   }
 
-  commit(ptr, name) {
-    return this.flush().then(() => {
-      let nodePath = join(this.dir, ptr);
-      let rootPath = join(this.dir, "index", name);
-      let tempPath = join(this.dir, this.nextPtr());
+  readTreeIndex() {
+    let forestPath = join(this.dir, "forest");
+    return new Promise((resolve, reject) => {
+      readFile(forestPath, (error, data) => {
+        if (error)
+          reject(error);
+        else
+          resolve(data);
+      })
+    }).then(data => {
+      return JSON.parse(data);
+    });
+  }
+
+  writeTreeIndex(trees) {
+    let tempPath = join(this.dir, this.nextPtr());
+    let forestPath = join(this.dir, "forest");
+    return new Promise((resolve, reject) => {
+      writeFile(tempPath, JSON.stringify(trees), error => {
+        if (error)
+          reject(error);
+        else
+          resolve();
+      });
+    }).then(() => {
       return new Promise((resolve, reject) => {
-        link(nodePath, tempPath, (error) => {
+        rename(tempPath, forestPath, error => {
           if (error)
             reject(error);
           else
             resolve();
         });
-      }).then(() => {
-        // This is intended to atomically rename over any existing root already committed with same name.
-        return new Promise((resolve, reject) => {
-          rename(tempPath, rootPath, (error) => {
-            if (error)
-              reject(error);
-            else
-              resolve();
-          });
-        }).catch(error => {
-          unlink(tempPath);
-          throw error;
-        });
+      }).catch(error => {
+        unlink(tempPath, error => {});
+        throw error;
       });
     });
   }

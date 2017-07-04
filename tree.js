@@ -79,12 +79,12 @@ class Tree {
    * @param {*} [rootPtr] Pointer to the tree's root node or undefined to create an empty tree.
    * @returns {Tree} A new tree.
    */
-  constructor(config, rootPtr) {
-    Object.assign(this, config, {
+  constructor(store, rootPtr, config) {
+    this.store = store;
+    this.config = Object.assign({
       order: 1024,
-      cmp: cmp,
-    });
-
+    }, config);
+    this.cmp = cmp;
     this.rootPtr = rootPtr;
     this.tx = new TransactionStore(this.store, this.rootPtr);
   }
@@ -167,27 +167,27 @@ class Tree {
         replaceChild(node.children, idx, child[PTR], this.tx);
 
         let sibling, newKey;
-        if (child.keys.length >= this.order * 2) {
+        if (child.keys.length >= this.config.order * 2) {
           if (child.children) {
             sibling = {
-              keys: child.keys.slice(this.order + 1),
-              children: child.children.slice(this.order + 1),
+              keys: child.keys.slice(this.config.order + 1),
+              children: child.children.slice(this.config.order + 1),
             };
 
-            newKey = child.keys[this.order];
+            newKey = child.keys[this.config.order];
 
-            child.children = child.children.slice(0, this.order + 1);
+            child.children = child.children.slice(0, this.config.order + 1);
           } else {
             sibling = {
-              keys: child.keys.slice(this.order),
-              values: child.values.slice(this.order),
+              keys: child.keys.slice(this.config.order),
+              values: child.values.slice(this.config.order),
             };
             newKey = sibling.keys[0];
             
-            child.values = child.values.slice(0, this.order);
+            child.values = child.values.slice(0, this.config.order);
           }
 
-          child.keys = child.keys.slice(0, this.order);
+          child.keys = child.keys.slice(0, this.config.order);
 
           node.keys.splice(idx, 0, newKey);
 
@@ -249,7 +249,7 @@ class Tree {
         this.tx.beginWrite(child);
         replaceChild(node.children, idx, child[PTR], this.tx);
 
-        if (nodeSize(child) < this.order) {
+        if (nodeSize(child) < this.config.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
           return this.tx.read(node.children[siblingIdx]).then(sibling => {
             let child1, child2, push, pop, minIdx;
@@ -267,7 +267,7 @@ class Tree {
               pop = Array.prototype.shift;
             }
 
-            if (nodeSize(sibling) > this.order) {
+            if (nodeSize(sibling) > this.config.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
               this.tx.beginWrite(sibling);
               replaceChild(node.children, siblingIdx, sibling[PTR], this.tx);
@@ -471,9 +471,8 @@ class Tree {
     return processChildren(node, 0);
   }
 
-  commit(name) {
+  commit() {
     this.tx.commit(this.rootPtr);
-    return this.store.commit(this.rootPtr, name);
   }
 
   rollback() {

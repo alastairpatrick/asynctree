@@ -1,7 +1,7 @@
 "use strict";
 
 const { expect } = require("chai");
-const { readdirSync, readFileSync, statSync } = require("fs");
+const { existsSync, readdirSync, readFileSync, statSync } = require("fs");
 const { dirname, join } = require("path");
 const sh = require("shelljs");
 const sinon = require("sinon");
@@ -218,23 +218,50 @@ describe("FileStore", function() {
     });
   })
 
-  it("commits root node", function() {
+  it("writes forest", function() {
     store.beginWrite(node1);
     store.endWrite(node1);
-    return store.commit(node1[PTR], "myroot").then(() => {
-      let nodePath = join(TEMP_DIR, "index", "myroot");
-      expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(node1);
+    return store.writeTreeIndex({
+      mytree: {
+        config: {
+          test: "config",
+        },
+        rootPtr: node1[PTR],
+      }
+    }).then(() => {
+      let forestPath = join(TEMP_DIR, "forest");
+      expect(JSON.parse(readFileSync(forestPath))).to.deep.equal({
+        mytree: {
+          config: {
+            test: "config",
+          },
+          rootPtr: node1[PTR],
+        }
+      });      
     });
-  })
+  });
 
-  it("commits root node over existing", function() {
+  it("reads forest", function() {
     store.beginWrite(node1);
     store.endWrite(node1);
-    return store.commit(node1[PTR], "myroot").then(() => {
-      return store.commit(node1[PTR], "myroot").then(() => {
-        let nodePath = join(TEMP_DIR, "index", "myroot");
-        expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(node1);
-      });
+    return store.writeTreeIndex({
+      mytree: {
+        config: {
+          test: "config",
+        },
+        rootPtr: node1[PTR],
+      }
+    }).then(() => {
+      return store.readTreeIndex();
+    }).then(trees => {
+      expect(trees).to.deep.equal({
+        mytree: {
+          config: {
+            test: "config",
+          },
+          rootPtr: node1[PTR],
+        }
+      });      
     });
-  })
+  });
 })
