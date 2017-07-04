@@ -175,9 +175,9 @@ class FileStore {
   }
 
   readTreeIndex() {
-    let forestPath = join(this.dir, "forest");
+    let indexPath = join(this.dir, "treeindex");
     return new Promise((resolve, reject) => {
-      readFile(forestPath, (error, data) => {
+      readFile(indexPath, (error, data) => {
         if (error)
           reject(error);
         else
@@ -190,7 +190,7 @@ class FileStore {
 
   writeTreeIndex(trees) {
     let tempPath = join(this.dir, this.nextPtr());
-    let forestPath = join(this.dir, "forest");
+    let indexPath = join(this.dir, "treeindex");
     return new Promise((resolve, reject) => {
       writeFile(tempPath, JSON.stringify(trees), error => {
         if (error)
@@ -200,7 +200,7 @@ class FileStore {
       });
     }).then(() => {
       return new Promise((resolve, reject) => {
-        rename(tempPath, forestPath, error => {
+        rename(tempPath, indexPath, error => {
           if (error)
             reject(error);
           else

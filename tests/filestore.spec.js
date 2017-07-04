@@ -218,7 +218,7 @@ describe("FileStore", function() {
     });
   })
 
-  it("writes forest", function() {
+  it("writes tree index", function() {
     store.beginWrite(node1);
     store.endWrite(node1);
     return store.writeTreeIndex({
@@ -229,8 +229,8 @@ describe("FileStore", function() {
         rootPtr: node1[PTR],
       }
     }).then(() => {
-      let forestPath = join(TEMP_DIR, "forest");
-      expect(JSON.parse(readFileSync(forestPath))).to.deep.equal({
+      let indexPath = join(TEMP_DIR, "treeindex");
+      expect(JSON.parse(readFileSync(indexPath))).to.deep.equal({
         mytree: {
           config: {
             test: "config",
@@ -241,7 +241,7 @@ describe("FileStore", function() {
     });
   });
 
-  it("reads forest", function() {
+  it("reads tree index", function() {
     store.beginWrite(node1);
     store.endWrite(node1);
     return store.writeTreeIndex({

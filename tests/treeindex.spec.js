@@ -73,18 +73,18 @@ describe("TreeIndex", function() {
   beforeEach(function() {
     this.store = new TestStore();
     return TreeIndex.open(this.store, {
-      forest: "config",
-    }).then(forest_ => {
-      this.forest = forest_;
+      index: "config",
+    }).then(index_ => {
+      this.treeIndex = index_;
     });
   })
 
   it("creates empty tree", function() {
-    let tree = this.forest.empty({
+    let tree = this.treeIndex.empty({
       tree: "config",
     });
     expect(tree.config).to.deep.equal({
-      forest: "config",
+      index: "config",
       tree: "config",
       order: 1024,
     });
@@ -97,15 +97,15 @@ describe("TreeIndex", function() {
   })
 
   it("openes existing tree", function() {
-    let tree = this.forest.empty({
+    let tree = this.treeIndex.empty({
       tree: "config",
     });
     return tree.insert(1, 10).then(() => {
-      return this.forest.commit({ mytree: tree });
+      return this.treeIndex.commit({ mytree: tree });
     }).then(() => {
-      let tree2 = this.forest.open("mytree").then(tree2 => {
+      let tree2 = this.treeIndex.open("mytree").then(tree2 => {
         expect(tree2.config).to.deep.equal({
-          forest: "config",
+          index: "config",
           tree: "config",
           order: 1024,
         });
@@ -117,7 +117,7 @@ describe("TreeIndex", function() {
   })
 
   it("exception on opening tree that does not exist", function() {
-    return this.forest.open("mytree").then(tree2 => {
+    return this.treeIndex.open("mytree").then(tree2 => {
       expect.fail("Did not throw");
     }).catch(error => {
       expect(error).to.match(/'mytree'/);
@@ -125,13 +125,13 @@ describe("TreeIndex", function() {
   })
 
   it("deletes existing tree", function() {
-    let tree = this.forest.empty();
+    let tree = this.treeIndex.empty();
     return tree.insert(1, 10).then(() => {
-      return this.forest.commit({ mytree: tree });
+      return this.treeIndex.commit({ mytree: tree });
     }).then(() => {
-      return this.forest.commit({ mytree: undefined });
+      return this.treeIndex.commit({ mytree: undefined });
     }).then(() => {
-      return this.forest.open("mytree");
+      return this.treeIndex.open("mytree");
     }).then(() => {
       expect.fail("Did not throw");
     }).catch(error => {
@@ -140,15 +140,15 @@ describe("TreeIndex", function() {
   })
 
   it("commits over existing tree", function() {
-    let tree = this.forest.empty();
+    let tree = this.treeIndex.empty();
     return tree.insert(1, 10).then(() => {
-      return this.forest.commit({ mytree: tree });
+      return this.treeIndex.commit({ mytree: tree });
     }).then(() => {
       return tree.update(1, 100);
     }).then(() => {
-      return this.forest.commit({ mytree: tree });
+      return this.treeIndex.commit({ mytree: tree });
     }).then(() => {
-      return this.forest.open("mytree").then(tree2 => {
+      return this.treeIndex.open("mytree").then(tree2 => {
         return tree2.get(1);
       }).then(value => {
         expect(value).to.equal(100);
