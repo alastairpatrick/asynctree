@@ -38,17 +38,12 @@ class FileStore {
   }
 
   static newSession(dir) {
-    return makeDir(join(dir, "index")).catch(error => {
-      if (error.code !== "EEXIST")
-        throw error;
-    }).then(() => {
-      return new Promise((resolve, reject) => {
-        mkdtemp(dir + sep, (error, dir) => {
-          if (error)
-            reject(error);
-          else
-            resolve(dir);
-        });
+    return new Promise((resolve, reject) => {
+      mkdtemp(dir + sep, (error, dir) => {
+        if (error)
+          reject(error);
+        else
+          resolve(dir);
       });
     }).then(sessionDir => {
       let sessionName = relative(dir, sessionDir);
@@ -174,25 +169,23 @@ class FileStore {
     return Promise.all(promises);
   }
 
-  readTreeIndex() {
-    let indexPath = join(this.dir, "treeindex");
+  readIndexPtr() {
+    let indexPath = join(this.dir, "index");
     return new Promise((resolve, reject) => {
-      readFile(indexPath, (error, data) => {
+      readFile(indexPath, { encoding: "utf-8" }, (error, data) => {
         if (error)
           reject(error);
         else
           resolve(data);
       })
-    }).then(data => {
-      return JSON.parse(data);
     });
   }
 
-  writeTreeIndex(trees) {
+  writeIndexPtr(ptr) {
     let tempPath = join(this.dir, this.nextPtr());
-    let indexPath = join(this.dir, "treeindex");
+    let indexPath = join(this.dir, "index");
     return new Promise((resolve, reject) => {
-      writeFile(tempPath, JSON.stringify(trees), error => {
+      writeFile(tempPath, ptr, error => {
         if (error)
           reject(error);
         else

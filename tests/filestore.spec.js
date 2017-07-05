@@ -58,11 +58,6 @@ describe("FileStore", function() {
     expect(readdirSync(sessionDir)).to.deep.equal([]);
   })
 
-  it("creates index directrory", function() {
-    let indexDir = join(TEMP_DIR, "index");
-    expect(statSync(indexDir).isDirectory()).to.be.true;
-  })
-
   it("assigns pointers to written nodes", function() {
     store.beginWrite(node1);
     let ptr1 = node1[PTR];
@@ -218,50 +213,18 @@ describe("FileStore", function() {
     });
   })
 
-  it("writes tree index", function() {
-    store.beginWrite(node1);
-    store.endWrite(node1);
-    return store.writeTreeIndex({
-      mytree: {
-        config: {
-          test: "config",
-        },
-        rootPtr: node1[PTR],
-      }
-    }).then(() => {
-      let indexPath = join(TEMP_DIR, "treeindex");
-      expect(JSON.parse(readFileSync(indexPath))).to.deep.equal({
-        mytree: {
-          config: {
-            test: "config",
-          },
-          rootPtr: node1[PTR],
-        }
-      });      
+  it("writes index", function() {
+    return store.writeIndexPtr("abcdef/000001").then(() => {
+      let indexPath = join(TEMP_DIR, "index");
+      expect(readFileSync(indexPath, { encoding: "utf-8" })).to.equal("abcdef/000001");
     });
   });
 
-  it("reads tree index", function() {
-    store.beginWrite(node1);
-    store.endWrite(node1);
-    return store.writeTreeIndex({
-      mytree: {
-        config: {
-          test: "config",
-        },
-        rootPtr: node1[PTR],
-      }
-    }).then(() => {
-      return store.readTreeIndex();
-    }).then(trees => {
-      expect(trees).to.deep.equal({
-        mytree: {
-          config: {
-            test: "config",
-          },
-          rootPtr: node1[PTR],
-        }
-      });      
+  it("reads index", function() {
+    return store.writeIndexPtr("abcdef/000001").then(() => {
+      return store.readIndexPtr();
+    }).then(ptr => {
+      expect(ptr).to.equal("abcdef/000001");      
     });
   });
 })

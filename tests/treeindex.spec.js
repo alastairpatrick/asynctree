@@ -10,12 +10,12 @@ const has = Object.prototype.hasOwnProperty;
 
 class TestStore {
   constructor() {
-    this.trees = {};
     this.nodes = {};
     this.pending = new Set();
     this.ptr = 1000;
+    this.indexPtr = undefined;
   }
-
+  
   read(ptr) {
     if (!has.call(this.nodes, ptr))
       return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
@@ -50,12 +50,12 @@ class TestStore {
     delete this.nodes[ptr];
   }
 
-  readTreeIndex() {
-    return Promise.resolve(this.trees);
+  readIndexPtr() {
+    return Promise.resolve(this.indexPtr);
   }
 
-  writeTreeIndex(trees) {
-    this.trees = trees;
+  writeIndexPtr(ptr) {
+    this.indexPtr = ptr;
     return Promise.resolve();
   }
 
@@ -96,7 +96,7 @@ describe("TreeIndex", function() {
     });
   })
 
-  it("openes existing tree", function() {
+  it("opens existing tree", function() {
     let tree = this.treeIndex.empty({
       tree: "config",
     });
