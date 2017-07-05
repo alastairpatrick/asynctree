@@ -14,12 +14,8 @@ class TransactionStore {
     return this.parent.read(ptr);
   }
 
-  beginWrite(node) {
-    this.parent.beginWrite(node);
-  }
-
-  endWrite(node) {
-    this.parent.endWrite(node);
+  write(node) {
+    this.parent.write(node);
     this.undos.add(node[PTR]);
   }
 

@@ -148,8 +148,7 @@ class Tree {
       if (dummyRoot.children.length === 1) {
         this.rootPtr = dummyRoot.children[0];
       } else {
-        this.tx.beginWrite(node);
-        this.tx.endWrite(node);
+        this.tx.write(node);
         this.rootPtr = node[PTR];
       }
     });
@@ -162,9 +161,6 @@ class Tree {
       return this.tx.read(node.children[idx]).then(child => {
         return this.setSubTree_(key, value, child, type, this.tx);
       }).then(({ node: child, idx: childIdx }) => {
-        this.tx.beginWrite(child);
-        replaceChild(node.children, idx, child[PTR], this.tx);
-
         let sibling, newKey;
         if (child.keys.length >= this.config.order * 2) {
           if (child.children) {
@@ -190,12 +186,13 @@ class Tree {
 
           node.keys.splice(idx, 0, newKey);
 
-          this.tx.beginWrite(sibling);
-          this.tx.endWrite(sibling);
+          this.tx.write(sibling);
           node.children.splice(idx + 1, 0, sibling[PTR]);
         }
 
-        this.tx.endWrite(child);
+        this.tx.write(child);
+        replaceChild(node.children, idx, child[PTR], this.tx);
+
         return { node, idx };
       });
     } else {
@@ -231,8 +228,7 @@ class Tree {
       if (node.children && node.children.length === 1) {
         this.rootPtr = node.children[0];
       } else {
-        this.tx.beginWrite(node);
-        this.tx.endWrite(node);
+        this.tx.write(node);
         this.rootPtr = node[PTR];
       }
     });
@@ -245,9 +241,6 @@ class Tree {
       return this.tx.read(node.children[idx]).then(child => {
         return this.deleteSubTree_(key, child);
       }).then(({ node: child, idx: childIdx }) => {
-        this.tx.beginWrite(child);
-        replaceChild(node.children, idx, child[PTR], this.tx);
-
         if (nodeSize(child) < this.config.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
           return this.tx.read(node.children[siblingIdx]).then(sibling => {
@@ -268,8 +261,6 @@ class Tree {
 
             if (nodeSize(sibling) > this.config.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
-              this.tx.beginWrite(sibling);
-              replaceChild(node.children, siblingIdx, sibling[PTR], this.tx);
 
               if (child.children) {
                 push.call(child.keys, node.keys[minIdx]);
@@ -286,7 +277,8 @@ class Tree {
                 node.keys[minIdx] = child2.keys[0];
               }
 
-              this.tx.endWrite(sibling);
+              this.tx.write(sibling);
+              replaceChild(node.children, siblingIdx, sibling[PTR], this.tx);
             } else {
               // Child is too small and its sibling is not big enough to spare any keys so merge them.
               if (child.children) {
@@ -302,12 +294,14 @@ class Tree {
               node.children.splice(siblingIdx, 1);
             }
 
-            this.tx.endWrite(child);
+            this.tx.write(child);
+            replaceChild(node.children, idx, child[PTR], this.tx);
             return { node, idx };
           });
         }
         
-        this.tx.endWrite(child);
+        this.tx.write(child);
+        replaceChild(node.children, idx, child[PTR], this.tx);
         return { node, idx };
       });
     } else {

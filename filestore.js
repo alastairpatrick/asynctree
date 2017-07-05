@@ -79,12 +79,8 @@ class FileStore {
     });
   }
 
-  beginWrite(node) {
-    let ptr = this.nextPtr();
-    node[PTR] = ptr;
-  }
-
-  endWrite(node) {
+  write(node) {
+    node[PTR] = this.nextPtr();
     node[MUST_WRITE] = true;
     this.cache_(node);
   }

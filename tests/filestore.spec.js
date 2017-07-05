@@ -44,20 +44,17 @@ describe("FileStore", function() {
   })
 
   it("assigns pointers to written nodes", function() {
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
-    this.store.beginWrite(this.node2);
+    this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    this.store.endWrite(this.node2);
     expect(ptr1).to.equal(this.store.sessionName + "/000000");
     expect(ptr2).to.equal(this.store.sessionName + "/000001");
   })
 
   it("can read cached written nodes before flush", function() {
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr = this.node1[PTR];
-    this.store.endWrite(this.node1);
     return this.store.read(ptr).then(node => {
       expect(node).to.deep.equal(this.node1);
       expect(node[PTR]).to.equal(ptr);
@@ -65,19 +62,8 @@ describe("FileStore", function() {
     });
   })
 
-  it("cannot read written nodes before endWrite", function() {
-    this.store.beginWrite(this.node1);
-    let ptr = this.node1[PTR];
-    return this.store.read(ptr).then(node => {
-      expect.fail("Did not throw");
-    }).catch(error => {
-      expect(error.code).to.equal("ENOENT");
-    });
-  })
-
   it("writes nodes to files on flush", function() {
-    this.store.beginWrite(this.node1);
-    this.store.endWrite(this.node1);
+    this.store.write(this.node1);
     return this.store.flush().then(() => {
       let nodePath = join(TEMP_DIR, this.store.sessionName, "000000");
       expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(this.node1);
@@ -85,15 +71,13 @@ describe("FileStore", function() {
   })
 
   it("does not write nodes to file while initially cached", function() {
-    this.store.beginWrite(this.node1);
-    this.store.endWrite(this.node1);
+    this.store.write(this.node1);
     expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal([]);
   })
 
   it("reads written node from file after flush", function() {
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
     return this.store.flush().then(() => {
       return this.store.read(ptr1);
     }).then(node => {
@@ -103,9 +87,8 @@ describe("FileStore", function() {
   })
 
   it("does not rewrite nodes to files in subsequent flushes", function() {
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
     return this.store.flush().then(() => {
       expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal(["000000"]);
       return this.store.flush();
@@ -115,9 +98,8 @@ describe("FileStore", function() {
   })
 
   it("cannot read nodes after deleting", function() {
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr = this.node1[PTR];
-    this.store.endWrite(this.node1);
     this.store.delete(ptr);
     return this.store.read(ptr).then(node => {
       expect.fail("Did not throw");
@@ -129,13 +111,11 @@ describe("FileStore", function() {
   it("nodes evicted from cache are written to file", function() {
     this.store.cacheSize = 1;
 
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
 
-    this.store.beginWrite(this.node2);
+    this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    this.store.endWrite(this.node2);
 
     expect(this.store.writing.size).to.equal(1);
     return this.store.writing.get(ptr1).promise.then(() => {
@@ -146,13 +126,11 @@ describe("FileStore", function() {
   it("nodes evicted from cache can be read again after they finish writing", function() {
     this.store.cacheSize = 1;
 
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
 
-    this.store.beginWrite(this.node2);
+    this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    this.store.endWrite(this.node2);
 
     expect(this.store.writing.size).to.equal(1);
     return this.store.writing.get(ptr1).promise.then(() => {
@@ -165,13 +143,11 @@ describe("FileStore", function() {
   it("nodes evicted from cache can be read while they are still being written", function() {
     this.store.cacheSize = 1;
 
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
 
-    this.store.beginWrite(this.node2);
+    this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    this.store.endWrite(this.node2);
 
     expect(this.store.writing.size).to.equal(1);
     return this.store.read(ptr1).then(node => {
@@ -182,13 +158,11 @@ describe("FileStore", function() {
   it("nodes evicted from cache can be deleted while they are still being written", function() {
     this.store.cacheSize = 1;
 
-    this.store.beginWrite(this.node1);
+    this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    this.store.endWrite(this.node1);
 
-    this.store.beginWrite(this.node2);
+    this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    this.store.endWrite(this.node2);
 
     this.store.delete(ptr1);
 

@@ -18,16 +18,14 @@ const deserializeTree = (store, json) => {
   let node = Object.assign({}, json);
   
   if (!has.call(node, "children")) {
-    store.beginWrite(node);
-    store.endWrite(node);
+    store.write(node);
     return Promise.resolve(node[PTR]);
   }
 
   let children = json.children.map(c => deserializeTree(store, c));
   return Promise.all(children).then(children => {
     node.children = children;
-    store.beginWrite(node);
-    store.endWrite(node);
+    store.write(node);
     return Promise.resolve(node[PTR]);
   });
 }
@@ -52,7 +50,6 @@ const testStoreFactory = () => {
 }
 
 testStoreFactory.after = (store) => {
-  store.check();
   return Promise.resolve();
 }
 
@@ -76,9 +73,8 @@ fileStoreFactory.after = (store) => {
           keys: [],
           values: [],
         };
-        this.store.beginWrite(emptyNode);
+        this.store.write(emptyNode);
         this.emptyNodePtr = emptyNode[PTR];
-        this.store.endWrite(emptyNode);
       });
     })
 

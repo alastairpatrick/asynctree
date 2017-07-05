@@ -10,8 +10,7 @@ const writeEmpty = (store) => {
     keys: [],
     values: [],
   };
-  store.beginWrite(root);
-  store.endWrite(root);
+  store.write(root);
   return root[PTR];
 }
 
