@@ -34,15 +34,6 @@ const cloneNode = (node) => {
   return clone;
 }
 
-const cmp = (a, b) => {
-  if (a < b)
-    return -1;
-  else if (a > b)
-    return 1;
-  else
-    return 0;
-}
-
 /**
  * A callback invoked for entry in a tree.
  * @callback EachCallback
@@ -84,9 +75,17 @@ class Tree {
     this.config = Object.assign({
       order: 1024,
     }, config);
-    this.cmp = cmp;
     this.rootPtr = rootPtr;
     this.tx = new TransactionStore(this.store, this.rootPtr);
+  }
+
+  cmp(a, b) {
+    if (a < b)
+      return -1;
+    else if (a > b)
+      return 1;
+    else
+      return 0;
   }
 
   atomically(fn, context) {
