@@ -1,5 +1,6 @@
 const { createHash } = require("crypto");
 const fs = require("fs");
+const os = require("os");
 const { dirname, join } = require("path");
 const zlib = require("zlib");
 
@@ -10,7 +11,10 @@ const MUST_WRITE = Symbol("MUST_WRITE");
 
 const has = Object.prototype.hasOwnProperty;
 
+const close = promisify(fs.close);
+const fsync = promisify(fs.fsync);
 const mkdir = promisify(fs.mkdir);
+const open = promisify(fs.open);
 const readFile = promisify(fs.readFile);
 const rename = promisify(fs.rename);
 const unlink = promisify(fs.unlink);
@@ -19,6 +23,47 @@ const writeFile = promisify(fs.writeFile);
 const deflate = promisify(zlib.deflate);
 const unzip = promisify(zlib.unzip);
 
+const tempDir = fs.mkdtempSync(join(os.tmpdir(), "filestore"));
+let tempCount = 0;
+
+const cleanup = () => {
+  let files = fs.readdirSync(tempDir);
+  files.forEach(file => {
+    console.error(`Deleting temporary file '${file}'.`);
+    fs.unlinkSync(join(tempDir, file));
+  });
+  fs.rmdirSync(tempDir);
+}
+
+process.on("exit", cleanup);
+process.on("SIGINT", cleanup);
+process.on("uncaughtException", cleanup);
+
+const writeFileAtomic = (path, data, options) => {
+  options = Object.assign({}, options, { flags: "wx" });
+
+  let tempPath = join(tempDir, tempCount.toString(36) + "." + Math.random().toString(36).substring(2));
+  ++tempCount;
+  return open(tempPath, "wx", options.mode).then(fd => {
+    return writeFile(fd, data, options).then(() => {
+      return fsync(fd);
+    }).catch(error => {
+      return close(fd).then(() => {
+        throw error;
+      });
+    }).then(() => {
+      return close(fd)
+    });
+  }).then(() => {
+    return rename(tempPath, path).catch(error => {
+      return unlink(tempPath).catch(() => {
+        throw error;
+      }).then(() => {
+        throw error;
+      });
+    });
+  });
+}
 
 const ensureDir = (dir) => {
   return mkdir(dir).catch(error => {
@@ -33,6 +78,7 @@ class FileStore {
     this.config = Object.assign({
       cacheSize: 12,
       compress: true,
+      fileMode: 0o444,
     }, config);
 
     this.cache = new Map();
@@ -145,14 +191,14 @@ class FileStore {
       promise = Promise.resolve(text);
     }
     promise = promise.then(buffer => {
-      return writeFile(path, buffer).catch(error => {
+      return writeFileAtomic(path, buffer, { mode: this.config.fileMode }).catch(error => {
         if (error.code !== "ENOENT")
           throw error;
-        return mkdir(join(this.dir, dirname(ptr))).catch(error => {
+        return mkdir(dirname(path)).catch(error => {
           if (error.code !== "EEXIST")
             throw error;
         }).then(() => {
-          return writeFile(path, buffer);
+          return writeFileAtomic(path, buffer, { mode: this.config.fileMode })
         });
       });
     }).then(() => {
@@ -186,15 +232,8 @@ class FileStore {
   }
 
   writeIndexPtr(ptr) {
-    let tempPath = join(this.dir, "index.tmp");
     let indexPath = join(this.dir, "index");
-    return writeFile(tempPath, ptr).then(() => {
-      return rename(tempPath, indexPath);
-    }).catch(error => {
-      return unlink(tempPath).then(() => {;
-        throw error;
-      });
-    });
+    return writeFileAtomic(indexPath, ptr, { mode: this.config.fileMode });
   }
 }
 
