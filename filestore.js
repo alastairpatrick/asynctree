@@ -150,6 +150,36 @@ class FileStore {
     });
   }
 
+  flush() {
+    for (let [ptr, node] of this.cache) {
+      if (node[MUST_WRITE] !== undefined)
+        this.writeNodeFile_(node);
+    }
+
+    let promises = [];
+    for (let [ptr, discrepancy] of this.discrepancies) {
+      promises.push(discrepancy.promise);
+    }
+
+    return Promise.all(promises);
+  }
+
+  sync() {
+    return this.flush().then(() => {
+      this.cache.clear();
+    });
+  }
+
+  readIndexPtr() {
+    let indexPath = join(this.dir, "index");
+    return readFile(indexPath, { encoding: "utf-8" });
+  }
+
+  writeIndexPtr(ptr) {
+    let indexPath = join(this.dir, "index");
+    return this.writeFileAtomic_(indexPath, ptr, { mode: this.config.fileMode });
+  }
+
   hash_(text) {
     let hash = this.createHash();
     hash.update(text);
@@ -218,36 +248,6 @@ class FileStore {
         });
       });
     });
-  }
-
-  flush() {
-    for (let [ptr, node] of this.cache) {
-      if (node[MUST_WRITE] !== undefined)
-        this.writeNodeFile_(node);
-    }
-
-    let promises = [];
-    for (let [ptr, discrepancy] of this.discrepancies) {
-      promises.push(discrepancy.promise);
-    }
-
-    return Promise.all(promises);
-  }
-
-  sync() {
-    return this.flush().then(() => {
-      this.cache.clear();
-    });
-  }
-
-  readIndexPtr() {
-    let indexPath = join(this.dir, "index");
-    return readFile(indexPath, { encoding: "utf-8" });
-  }
-
-  writeIndexPtr(ptr) {
-    let indexPath = join(this.dir, "index");
-    return this.writeFileAtomic_(indexPath, ptr, { mode: this.config.fileMode });
   }
 }
 
