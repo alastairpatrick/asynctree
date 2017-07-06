@@ -1,7 +1,7 @@
 "use strict";
 
 const { expect } = require("chai");
-const { existsSync, readdirSync, readFileSync, statSync } = require("fs");
+const { existsSync, readdirSync, readFileSync, statSync, writeFileSync } = require("fs");
 const { dirname, join } = require("path");
 const sh = require("shelljs");
 const sinon = require("sinon");
@@ -117,6 +117,38 @@ describe("FileStore", function() {
     }).then(node => {
       expect(node).to.deep.equal(this.node1);
       expect(node[PTR]).to.equal(ptr1);
+    });
+  })
+
+  it("reads and verifies compressed node from file after flush", function() {
+    this.store.config.verifyHash = true;
+    this.store.write(this.node1);
+    let ptr1 = this.node1[PTR];
+    return this.store.flush().then(() => {
+      return this.store.read(ptr1);
+    }).then(node => {
+      expect(node).to.deep.equal(this.node1);
+      expect(node[PTR]).to.equal(ptr1);
+    });
+  })
+
+  it("throws exception of failed verification", function() {
+    this.store.config.verifyHash = true;
+    this.store.config.fileMode = 0o666;  // So node files can be corrupted easily
+
+    this.store.write(this.node1);
+    let ptr1 = this.node1[PTR];
+    return this.store.flush().then(() => {
+      let path = join(TEMP_DIR, ptr1);
+
+      // Corrupt the node file
+      writeFileSync(path, "!");
+
+      return this.store.read(ptr1);
+    }).then(node => {
+      expect.fail("Did not throw");
+    }).catch(error => {
+      expect(error).to.match(/hash digest/);
     });
   })
 

@@ -39,32 +39,6 @@ process.on("exit", cleanup);
 process.on("SIGINT", cleanup);
 process.on("uncaughtException", cleanup);
 
-const writeFileAtomic = (path, data, options) => {
-  options = Object.assign({}, options, { flags: "wx" });
-
-  let tempPath = join(tempDir, tempCount.toString(36) + "." + Math.random().toString(36).substring(2));
-  ++tempCount;
-  return open(tempPath, "wx", options.mode).then(fd => {
-    return writeFile(fd, data, options).then(() => {
-      return fsync(fd);
-    }).catch(error => {
-      return close(fd).then(() => {
-        throw error;
-      });
-    }).then(() => {
-      return close(fd)
-    });
-  }).then(() => {
-    return rename(tempPath, path).catch(error => {
-      return unlink(tempPath).catch(() => {
-        throw error;
-      }).then(() => {
-        throw error;
-      });
-    });
-  });
-}
-
 const ensureDir = (dir) => {
   return mkdir(dir).catch(error => {
     if (error.code !== "EEXIST")
@@ -79,11 +53,13 @@ class FileStore {
       cacheSize: 12,
       compress: true,
       fileMode: 0o444,
+      maxPendingSyncs: 100,
+      verifyHash: false,
     }, config);
 
     this.cache = new Map();
     this.writing = new Map();
-    this.syncPromise = Promise.resolve();
+    this.syncPromises = [];
   }
 
   createHash() {
@@ -112,7 +88,16 @@ class FileStore {
     
     if (this.config.compress)
       promise = promise.then(unzip);
-    
+  
+    if (this.config.verifyHash) {
+      promise = promise.then(text => {
+        let hash = this.hash_(text);
+        if (ptr !== hash)
+          throw new Error(`Data for node '${ptr}' is does not match hash digest.`);
+        return text;
+      });
+    }
+
     return promise.then(text => {
       let node = JSON.parse(text);
       node[PTR] = ptr;
@@ -123,12 +108,7 @@ class FileStore {
 
   write(node) {
     let text = JSON.stringify(node);
-
-    let hash = this.createHash();
-    hash.update(text);
-    let ptr = hash.digest("hex");
-    ptr = ptr.substring(0, 2) + "/" + ptr.substring(2);
-
+    let ptr = this.hash_(text);
     node[MUST_WRITE] = text;
     node[PTR] = ptr;
     this.cache_(node);
@@ -159,8 +139,16 @@ class FileStore {
       nodePromise.node = undefined;
       nodePromise.promise = nodePromise.promise.then(() => new Promise(deleteFn));
     } else {
-      this.syncPromise = Promise.all([new Promise(deleteFn), this.syncPromise]);
+      this.syncPromises.push(new Promise(deleteFn));
     }
+  }
+
+  hash_(text) {
+    let hash = this.createHash();
+    hash.update(text);
+    let ptr = hash.digest("hex");
+    ptr = ptr.substring(0, 2) + "/" + ptr.substring(2);
+    return ptr;
   }
 
   cache_(node) {
@@ -172,14 +160,14 @@ class FileStore {
         break;
 
       if (node[MUST_WRITE] !== undefined) {
-        this.writeFile_(node);
+        this.writeNodeFile_(node);
       }
 
       this.cache.delete(ptr);
     }
   }
 
-  writeFile_(node) {
+  writeNodeFile_(node) {
     let ptr = node[PTR];
     let path = join(this.dir, ptr);
     let text = node[MUST_WRITE];
@@ -191,14 +179,14 @@ class FileStore {
       promise = Promise.resolve(text);
     }
     promise = promise.then(buffer => {
-      return writeFileAtomic(path, buffer, { mode: this.config.fileMode }).catch(error => {
+      return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode }).catch(error => {
         if (error.code !== "ENOENT")
           throw error;
         return mkdir(dirname(path)).catch(error => {
           if (error.code !== "EEXIST")
             throw error;
         }).then(() => {
-          return writeFileAtomic(path, buffer, { mode: this.config.fileMode })
+          return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
         });
       });
     }).then(() => {
@@ -208,20 +196,54 @@ class FileStore {
     this.writing.set(ptr, { node, promise });
   }
 
+  writeFileAtomic_(path, data, options) {
+    options = Object.assign({}, options, { flags: "wx" });
+
+    let tempPath = join(tempDir, tempCount.toString(36) + "." + Math.random().toString(36).substring(2));
+    ++tempCount;
+    return open(tempPath, "wx", options.mode).then(fd => {
+      return writeFile(fd, data, options).then(() => {
+        return this.queueSync_(fsync(fd));
+      }).catch(error => {
+        return close(fd).then(() => {
+          throw error;
+        });
+      }).then(() => {
+        return close(fd)
+      });
+    }).then(() => {
+      return rename(tempPath, path).catch(error => {
+        return unlink(tempPath).catch(() => {
+          throw error;
+        }).then(() => {
+          throw error;
+        });
+      });
+    });
+  }
+
+  queueSync_(promise) {
+    this.syncPromises.push(promise);
+    if (this.syncPromises.length > this.config.maxPendingSyncs)
+      return Promise.all(this.syncPromises.splice(0, this.syncPromises.length - this.config.maxPendingSyncs));
+    else
+      return Promise.resolve();
+  }
+
   flush() {
     for (let [ptr, node] of this.cache) {
       if (node[MUST_WRITE] !== undefined)
-        this.writeFile_(node);
+        this.writeNodeFile_(node);
     }
 
-    let promises = [this.syncPromise];
+    let promises = this.syncPromises;
+    this.syncPromises = [];
     for (let [ptr, nodePromise] of this.writing) {
       promises.push(nodePromise.promise);
     }
 
     this.cache.clear();
     this.writing.clear();
-    this.syncPromise = Promise.resolve();
 
     return Promise.all(promises);
   }
@@ -233,7 +255,7 @@ class FileStore {
 
   writeIndexPtr(ptr) {
     let indexPath = join(this.dir, "index");
-    return writeFileAtomic(indexPath, ptr, { mode: this.config.fileMode });
+    return this.writeFileAtomic_(indexPath, ptr, { mode: this.config.fileMode });
   }
 }
 
