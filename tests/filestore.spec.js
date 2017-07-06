@@ -138,7 +138,7 @@ describe("FileStore", function() {
 
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
-    return this.store.flush().then(() => {
+    return this.store.sync().then(() => {
       let path = join(TEMP_DIR, ptr1);
 
       // Corrupt the node file
@@ -161,8 +161,9 @@ describe("FileStore", function() {
     this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
 
-    expect(this.store.writing.size).to.equal(1);
-    return this.store.writing.get(ptr1).promise.then(() => {
+    expect(this.store.discrepancies.size).to.equal(1);
+    return this.store.flush().then(() => {
+      expect(this.store.discrepancies.size).to.equal(0);
       expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
     })
   })
@@ -176,8 +177,9 @@ describe("FileStore", function() {
     this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
 
-    expect(this.store.writing.size).to.equal(1);
-    return this.store.writing.get(ptr1).promise.then(() => {
+    expect(this.store.discrepancies.size).to.equal(1);
+    return this.store.flush().then(() => {
+      expect(this.store.discrepancies.size).to.equal(0);
       return this.store.read(ptr1).then(node => {
         expect(node).to.deep.equal(this.node1);
       });
@@ -193,7 +195,7 @@ describe("FileStore", function() {
     this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
 
-    expect(this.store.writing.size).to.equal(1);
+    expect(this.store.discrepancies.size).to.equal(1);
     return this.store.read(ptr1).then(node => {
       expect(node).to.deep.equal(this.node1);
     });
@@ -210,8 +212,9 @@ describe("FileStore", function() {
 
     this.store.delete(ptr1);
 
-    expect(this.store.writing.size).to.equal(1);
-    return this.store.writing.get(ptr1).promise.then(() => {
+    expect(this.store.discrepancies.size).to.equal(1);
+    return this.store.flush().then(() => {
+      expect(this.store.discrepancies.size).to.equal(0);
       expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([]);
     });
   })

@@ -12,7 +12,6 @@ const MUST_WRITE = Symbol("MUST_WRITE");
 const has = Object.prototype.hasOwnProperty;
 
 const close = promisify(fs.close);
-const fsync = promisify(fs.fsync);
 const mkdir = promisify(fs.mkdir);
 const open = promisify(fs.open);
 const readFile = promisify(fs.readFile);
@@ -53,13 +52,13 @@ class FileStore {
       cacheSize: 12,
       compress: true,
       fileMode: 0o444,
-      maxPendingSyncs: 100,
       verifyHash: false,
     }, config);
 
     this.cache = new Map();
-    this.writing = new Map();
-    this.syncPromises = [];
+
+    // Changes that are effective but in progress of being written to files.
+    this.discrepancies = new Map();
   }
 
   createHash() {
@@ -75,9 +74,13 @@ class FileStore {
       return Promise.resolve(cloneNode(node));      
     }
 
-    let nodePromise = this.writing.get(ptr);
-    if (nodePromise !== undefined)
-      return Promise.resolve(cloneNode(nodePromise.node));      
+    let discrepancy = this.discrepancies.get(ptr);  
+    if (discrepancy !== undefined) {
+      if (discrepancy.node !== undefined)
+        return Promise.resolve(cloneNode(discrepancy.node));
+      else
+        return Promise.reject(`Node ${ptr} was deleted before writing to file.`);
+    }
 
     let path = join(this.dir, ptr);
 
@@ -123,24 +126,28 @@ class FileStore {
         return;
     }
 
-    // If the node is in the process of writing to a file, chase the write with a delete. Otherwise, delete immediately.
-    let path = join(this.dir, ptr);
-    let deleteFn = (resolve, reject) => {
-      unlink(path, (error) => {
-        if (error)
-          reject(error);
-        else
-          resolve();
-      });
-    };
+    // Otherwise, delete file asynchronously.
+    let path = join(this.dir, ptr);    
+    this.schedulePtrTask_(ptr, undefined, () => unlink(path));
+  }
 
-    let nodePromise = this.writing.get(ptr);
-    if (nodePromise !== undefined) {
-      nodePromise.node = undefined;
-      nodePromise.promise = nodePromise.promise.then(() => new Promise(deleteFn));
-    } else {
-      this.syncPromises.push(new Promise(deleteFn));
+  schedulePtrTask_(ptr, node, task) {
+    let discrepancy = this.discrepancies.get(ptr);
+    if (discrepancy === undefined) {
+      discrepancy = {
+        node: undefined,
+        count: 0,
+        promise: Promise.resolve(),
+      };
+      this.discrepancies.set(ptr, discrepancy);
     }
+
+    discrepancy.node = node;
+    ++discrepancy.count;
+    discrepancy.promise = discrepancy.promise.then(task).then(() => {
+      if (--discrepancy.count === 0)
+        this.discrepancies.delete(ptr);
+    });
   }
 
   hash_(text) {
@@ -159,10 +166,9 @@ class FileStore {
       if (this.cache.size <= this.config.cacheSize)
         break;
 
-      if (node[MUST_WRITE] !== undefined) {
+      if (node[MUST_WRITE] !== undefined)
         this.writeNodeFile_(node);
-      }
-
+     
       this.cache.delete(ptr);
     }
   }
@@ -171,29 +177,31 @@ class FileStore {
     let ptr = node[PTR];
     let path = join(this.dir, ptr);
     let text = node[MUST_WRITE];
-    let promise;
-    if (this.config.compress) {
+    node[MUST_WRITE] = undefined;
+    if (this.config.compress)
       path += ".gz";
-      promise = deflate(text);
-    } else {
-      promise = Promise.resolve(text);
-    }
-    promise = promise.then(buffer => {
-      return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode }).catch(error => {
-        if (error.code !== "ENOENT")
-          throw error;
-        return mkdir(dirname(path)).catch(error => {
-          if (error.code !== "EEXIST")
+
+    this.schedulePtrTask_(ptr, node, () => {
+      let promise;
+      if (this.config.compress) {
+        promise = deflate(text);
+      } else {
+        promise = Promise.resolve(text);
+      }
+      
+      return promise.then(buffer => {
+        return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode }).catch(error => {
+          if (error.code !== "ENOENT")
             throw error;
-        }).then(() => {
-          return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
+          return mkdir(dirname(path)).catch(error => {
+            if (error.code !== "EEXIST")
+              throw error;
+          }).then(() => {
+            return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
+          });
         });
       });
-    }).then(() => {
-      this.writing.delete(ptr);
     });
-    node[MUST_WRITE] = undefined;
-    this.writing.set(ptr, { node, promise });
   }
 
   writeFileAtomic_(path, data, options) {
@@ -201,17 +209,7 @@ class FileStore {
 
     let tempPath = join(tempDir, tempCount.toString(36) + "." + Math.random().toString(36).substring(2));
     ++tempCount;
-    return open(tempPath, "wx", options.mode).then(fd => {
-      return writeFile(fd, data, options).then(() => {
-        return this.queueSync_(fsync(fd));
-      }).catch(error => {
-        return close(fd).then(() => {
-          throw error;
-        });
-      }).then(() => {
-        return close(fd)
-      });
-    }).then(() => {
+    return writeFile(tempPath, data, options).then(() => {
       return rename(tempPath, path).catch(error => {
         return unlink(tempPath).catch(() => {
           throw error;
@@ -222,30 +220,24 @@ class FileStore {
     });
   }
 
-  queueSync_(promise) {
-    this.syncPromises.push(promise);
-    if (this.syncPromises.length > this.config.maxPendingSyncs)
-      return Promise.all(this.syncPromises.splice(0, this.syncPromises.length - this.config.maxPendingSyncs));
-    else
-      return Promise.resolve();
-  }
-
   flush() {
     for (let [ptr, node] of this.cache) {
       if (node[MUST_WRITE] !== undefined)
         this.writeNodeFile_(node);
     }
 
-    let promises = this.syncPromises;
-    this.syncPromises = [];
-    for (let [ptr, nodePromise] of this.writing) {
-      promises.push(nodePromise.promise);
+    let promises = [];
+    for (let [ptr, discrepancy] of this.discrepancies) {
+      promises.push(discrepancy.promise);
     }
 
-    this.cache.clear();
-    this.writing.clear();
-
     return Promise.all(promises);
+  }
+
+  sync() {
+    return this.flush().then(() => {
+      this.cache.clear();
+    });
   }
 
   readIndexPtr() {
