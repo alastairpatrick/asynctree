@@ -1,6 +1,7 @@
 const { createHash } = require("crypto");
 const fs = require("fs");
 const { dirname, join } = require("path");
+const zlib = require("zlib");
 
 const { promisify } = require("./promisify");
 const { cloneNode, PTR } = require("./tree");
@@ -15,6 +16,9 @@ const rename = promisify(fs.rename);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
 
+const deflate = promisify(zlib.deflate);
+const unzip = promisify(zlib.unzip);
+
 
 const ensureDir = (dir) => {
   return mkdir(dir).catch(error => {
@@ -24,12 +28,16 @@ const ensureDir = (dir) => {
 }
 
 class FileStore {
-  constructor(dir) {
+  constructor(dir, config={}) {
     this.dir = dir;
+    this.config = Object.assign({
+      cacheSize: 12,
+      compress: true,
+    }, config);
+
     this.cache = new Map();
     this.writing = new Map();
     this.syncPromise = Promise.resolve();
-    this.cacheSize = 12;
   }
 
   createHash() {
@@ -50,8 +58,17 @@ class FileStore {
       return Promise.resolve(cloneNode(nodePromise.node));      
 
     let path = join(this.dir, ptr);
-    return readFile(path).then(data => {
-      let node = JSON.parse(data);
+
+    if (this.config.compress)
+      path += ".gz";
+
+    let promise = readFile(path);
+    
+    if (this.config.compress)
+      promise = promise.then(unzip);
+    
+    return promise.then(text => {
+      let node = JSON.parse(text);
       node[PTR] = ptr;
       this.cache_(node);
       return node;
@@ -105,7 +122,7 @@ class FileStore {
     this.cache.set(node[PTR], node);
 
     for (let [ptr, node] of this.cache) {
-      if (this.cache.size <= this.cacheSize)
+      if (this.cache.size <= this.config.cacheSize)
         break;
 
       if (node[MUST_WRITE] !== undefined) {
@@ -120,14 +137,23 @@ class FileStore {
     let ptr = node[PTR];
     let path = join(this.dir, ptr);
     let text = node[MUST_WRITE];
-    let promise = writeFile(path, text).catch(error => {
-      if (error.code !== "ENOENT")
-        throw error;
-      return mkdir(join(this.dir, dirname(ptr))).catch(error => {
-        if (error.code !== "EEXIST")
+    let promise;
+    if (this.config.compress) {
+      path += ".gz";
+      promise = deflate(text);
+    } else {
+      promise = Promise.resolve(text);
+    }
+    promise = promise.then(buffer => {
+      return writeFile(path, buffer).catch(error => {
+        if (error.code !== "ENOENT")
           throw error;
-      }).then(() => {
-        return writeFile(path, text);
+        return mkdir(join(this.dir, dirname(ptr))).catch(error => {
+          if (error.code !== "EEXIST")
+            throw error;
+        }).then(() => {
+          return writeFile(path, buffer);
+        });
       });
     }).then(() => {
       this.writing.delete(ptr);

@@ -31,8 +31,10 @@ describe("FileStore", function() {
 
     sh.rm("-rf", join(TEMP_DIR, "*"));
 
-    this.store = new FileStore(TEMP_DIR);
-    this.store.cacheSize = Infinity;
+    this.store = new FileStore(TEMP_DIR, {
+      cacheSize: Infinity,
+      compress: false,
+    });
   })
 
   afterEach(function() {
@@ -106,8 +108,20 @@ describe("FileStore", function() {
     });
   })
 
+  it("reads compressed node from file after flush", function() {
+    this.store.config.compress = true;
+    this.store.write(this.node1);
+    let ptr1 = this.node1[PTR];
+    return this.store.flush().then(() => {
+      return this.store.read(ptr1);
+    }).then(node => {
+      expect(node).to.deep.equal(this.node1);
+      expect(node[PTR]).to.equal(ptr1);
+    });
+  })
+
   it("nodes evicted from cache are written to file", function() {
-    this.store.cacheSize = 1;
+    this.store.config.cacheSize = 1;
 
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
@@ -122,7 +136,7 @@ describe("FileStore", function() {
   })
 
   it("nodes evicted from cache can be read again after they finish writing", function() {
-    this.store.cacheSize = 1;
+    this.store.config.cacheSize = 1;
 
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
@@ -139,7 +153,7 @@ describe("FileStore", function() {
   })
 
   it("nodes evicted from cache can be read while they are still being written", function() {
-    this.store.cacheSize = 1;
+    this.store.config.cacheSize = 1;
 
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
@@ -154,7 +168,7 @@ describe("FileStore", function() {
   })
 
   it("nodes evicted from cache can be deleted while they are still being written", function() {
-    this.store.cacheSize = 1;
+    this.store.config.cacheSize = 1;
 
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
