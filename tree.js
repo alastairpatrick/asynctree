@@ -155,7 +155,7 @@ class Tree {
   }
 
   setSubTree_(key, value, node, type) {
-    let { idx, cmp } = this.findKey_(key, node);
+    let { idx, equal } = this.findKey_(key, node);
 
     if (node.children) {
       return this.tx.read(node.children[idx]).then(child => {
@@ -196,7 +196,7 @@ class Tree {
         return { node, idx };
       });
     } else {
-      if (cmp === 0)  {
+      if (equal)  {
         if (type === "insert")
           throw new Error(`Key '${key}' already in tree.`);
         node.values[idx] = value;
@@ -235,7 +235,7 @@ class Tree {
   }
 
   deleteSubTree_(key, node) {
-    let { idx, cmp } = this.findKey_(key, node);
+    let { idx, equal } = this.findKey_(key, node);
 
     if (node.children) {
       return this.tx.read(node.children[idx]).then(child => {
@@ -305,7 +305,7 @@ class Tree {
         return { node, idx };
       });
     } else {
-      if (cmp === 0) {
+      if (equal) {
         node.keys.splice(idx, 1);
         node.values.splice(idx, 1);
         return Promise.resolve({ node, idx });
@@ -415,21 +415,30 @@ class Tree {
   }
 
   findKey_(key, node) {
-    let idx, cmp;
+    let low = 0;
+    let high = node.keys.length;
     if (node.children) {
-      for (idx = 0; idx < node.keys.length; ++idx) {
-        cmp = this.cmp(node.keys[idx], key);
-        if (cmp > 0)
-          break;
+      while (low < high) {
+        let mid = (low + high) >>> 1;
+        let cmp = this.cmp(node.keys[mid], key);
+        if (cmp <= 0)
+          low = mid + 1;
+        else
+          high = mid;
       }
     } else {
-      for (idx = 0; idx < node.keys.length; ++idx) {
-        cmp = this.cmp(node.keys[idx], key);
-        if (cmp >= 0)
-          break;
+      while (low < high) {
+        let mid = (low + high) >>> 1;
+        let cmp = this.cmp(node.keys[mid], key);
+        if (cmp < 0)
+          low = mid + 1;
+        else
+          high = mid;
       }
     }
-    return { idx, cmp };
+
+    let equal = high < node.keys.length && this.cmp(node.keys[high], key) === 0;
+    return { idx: high, equal };
   }
 
   mark(cb, context) {
