@@ -19,16 +19,20 @@ describe("FileStore", function() {
       keys: [1],
       values: [1],
     };
+    this.ptr1 = "8a/e9b8c4137941181c067514bdcb2371";
+    this.dir1 = "8a";
 
     this.node2 = {
-      keys: [1],
-      values: [1],
+      keys: [2],
+      values: [2],
     };
+    this.ptr2 = "de/6cdc8f57b0b7af87574f6ff128a297";
+    this.dir2 = "de";
 
-    return FileStore.newSession(TEMP_DIR).then(store_ => {
-      this.store = store_;
-      this.store.cacheSize = Infinity;
-    });
+    sh.rm("-rf", join(TEMP_DIR, "*"));
+
+    this.store = new FileStore(TEMP_DIR);
+    this.store.cacheSize = Infinity;
   })
 
   afterEach(function() {
@@ -37,19 +41,13 @@ describe("FileStore", function() {
     });
   });
 
-  it("creates session directrory", function() {
-    let sessionDir = join(TEMP_DIR, this.store.sessionName);
-    expect(statSync(sessionDir).isDirectory()).to.be.true;
-    expect(readdirSync(sessionDir)).to.deep.equal([]);
-  })
-
   it("assigns pointers to written nodes", function() {
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
     this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    expect(ptr1).to.equal(this.store.sessionName + "/000000");
-    expect(ptr2).to.equal(this.store.sessionName + "/000001");
+    expect(ptr1).to.equal(this.ptr1);
+    expect(ptr2).to.equal(this.ptr2);
   })
 
   it("can read cached written nodes before flush", function() {
@@ -65,14 +63,14 @@ describe("FileStore", function() {
   it("writes nodes to files on flush", function() {
     this.store.write(this.node1);
     return this.store.flush().then(() => {
-      let nodePath = join(TEMP_DIR, this.store.sessionName, "000000");
+      let nodePath = join(TEMP_DIR, this.ptr1);
       expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(this.node1);
     });
   })
 
   it("does not write nodes to file while initially cached", function() {
     this.store.write(this.node1);
-    expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal([]);
+    expect(readdirSync(join(TEMP_DIR))).to.deep.equal([]);
   })
 
   it("reads written node from file after flush", function() {
@@ -90,10 +88,10 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
     return this.store.flush().then(() => {
-      expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal(["000000"]);
+      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
       return this.store.flush();
     }).then(node => {
-      expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal(["000000"]);
+      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
     });
   })
 
@@ -119,7 +117,7 @@ describe("FileStore", function() {
 
     expect(this.store.writing.size).to.equal(1);
     return this.store.writing.get(ptr1).promise.then(() => {
-      expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal(["000000"]);
+      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
     })
   })
 
@@ -168,22 +166,22 @@ describe("FileStore", function() {
 
     expect(this.store.writing.size).to.equal(1);
     return this.store.writing.get(ptr1).promise.then(() => {
-      expect(readdirSync(join(TEMP_DIR, this.store.sessionName))).to.deep.equal([]);
+      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([]);
     });
   })
 
   it("writes index", function() {
-    return this.store.writeIndexPtr("abcdef/000001").then(() => {
+    return this.store.writeIndexPtr(this.ptr1).then(() => {
       let indexPath = join(TEMP_DIR, "index");
-      expect(readFileSync(indexPath, { encoding: "utf-8" })).to.equal("abcdef/000001");
+      expect(readFileSync(indexPath, { encoding: "utf-8" })).to.equal(this.ptr1);
     });
   });
 
   it("reads index", function() {
-    return this.store.writeIndexPtr("abcdef/000001").then(() => {
+    return this.store.writeIndexPtr(this.ptr1).then(() => {
       return this.store.readIndexPtr();
     }).then(ptr => {
-      expect(ptr).to.equal("abcdef/000001");      
+      expect(ptr).to.equal(this.ptr1);      
     });
   });
 })

@@ -46,7 +46,7 @@ const serializeTree = (store, ptr) => {
 }
 
 const testStoreFactory = () => {
-  return Promise.resolve(new TestStore());
+  return new TestStore();
 }
 
 testStoreFactory.after = (store) => {
@@ -54,12 +54,12 @@ testStoreFactory.after = (store) => {
 }
 
 const fileStoreFactory = () => {
-  return FileStore.newSession(TEMP_DIR);
+  return new FileStore(TEMP_DIR);
 }
 
 fileStoreFactory.after = (store) => {
   return store.flush().then(() => {
-    sh.rm("-rf", join(TEMP_DIR, store.sessionName));
+    sh.rm("-rf", join(TEMP_DIR, "*"));
   });
 }
 
@@ -67,15 +67,13 @@ fileStoreFactory.after = (store) => {
   describe("Tree", function() {
     beforeEach(function() {
       this.sandbox = sinon.sandbox.create();
-      return factory().then(store_ => {
-        this.store = store_;
-        let emptyNode = {
-          keys: [],
-          values: [],
-        };
-        this.store.write(emptyNode);
-        this.emptyNodePtr = emptyNode[PTR];
-      });
+      this.store = factory();
+      let emptyNode = {
+        keys: [],
+        values: [],
+      };
+      this.store.write(emptyNode);
+      this.emptyNodePtr = emptyNode[PTR];
     })
 
     afterEach(function() {

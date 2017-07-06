@@ -1,55 +1,41 @@
-const { mkdir, mkdtemp, readFile, rename, unlink, writeFile } = require("fs");
-const { join, relative, sep } = require("path");
+const { createHash } = require("crypto");
+const fs = require("fs");
+const { dirname, join } = require("path");
 
+const { promisify } = require("./promisify");
 const { cloneNode, PTR } = require("./tree");
 
 const MUST_WRITE = Symbol("MUST_WRITE");
 
 const has = Object.prototype.hasOwnProperty;
 
-const toString36 = (n) => {
-  return ("000000" + n.toString(36)).slice(-6);
-}
+const mkdir = promisify(fs.mkdir);
+const readFile = promisify(fs.readFile);
+const rename = promisify(fs.rename);
+const unlink = promisify(fs.unlink);
+const writeFile = promisify(fs.writeFile);
 
-const makeDir = (dir) => {
-  return new Promise((resolve, reject) => {
-    mkdir(dir, (error) => {
-      if (error)
-        reject(error);
-      else
-        resolve();
-    });
+
+const ensureDir = (dir) => {
+  return mkdir(dir).catch(error => {
+    if (error.code !== "EEXIST")
+      throw error;
   })
 }
 
 class FileStore {
-  constructor(dir, sessionName) {
+  constructor(dir) {
     this.dir = dir;
-    this.sessionName = sessionName;
-    this.nodeIdx = 0;
     this.cache = new Map();
     this.writing = new Map();
     this.syncPromise = Promise.resolve();
     this.cacheSize = 12;
   }
 
-  nextPtr() {
-    return this.sessionName + "/" + toString36(this.nodeIdx++);
-  }
-
-  static newSession(dir) {
-    return new Promise((resolve, reject) => {
-      mkdtemp(dir + sep, (error, dir) => {
-        if (error)
-          reject(error);
-        else
-          resolve(dir);
-      });
-    }).then(sessionDir => {
-      let sessionName = relative(dir, sessionDir);
-      let store = new FileStore(dir, sessionName);
-      return store;
-    });
+  createHash() {
+    // Not intended to be resilient to deliberate collisions attempts. When that's an issue, override
+    // this function to use another hash function or HMAC.
+    return createHash("md5");
   }
 
   read(ptr) {
@@ -64,14 +50,7 @@ class FileStore {
       return Promise.resolve(cloneNode(nodePromise.node));      
 
     let path = join(this.dir, ptr);
-    return new Promise((resolve, reject) => {
-      readFile(path, (error, data) => {
-        if (error)
-          reject(error);
-        else
-          resolve(data);
-      });
-    }).then(data => {
+    return readFile(path).then(data => {
       let node = JSON.parse(data);
       node[PTR] = ptr;
       this.cache_(node);
@@ -80,8 +59,15 @@ class FileStore {
   }
 
   write(node) {
-    node[PTR] = this.nextPtr();
-    node[MUST_WRITE] = true;
+    let text = JSON.stringify(node);
+
+    let hash = this.createHash();
+    hash.update(text);
+    let ptr = hash.digest("hex");
+    ptr = ptr.substring(0, 2) + "/" + ptr.substring(2);
+
+    node[MUST_WRITE] = text;
+    node[PTR] = ptr;
     this.cache_(node);
   }
 
@@ -90,7 +76,7 @@ class FileStore {
     let node = this.cache.get(ptr);
     if (node !== undefined) {
       this.cache.delete(ptr);
-      if (node[MUST_WRITE])
+      if (node[MUST_WRITE] !== undefined)
         return;
     }
 
@@ -122,7 +108,7 @@ class FileStore {
       if (this.cache.size <= this.cacheSize)
         break;
 
-      if (node[MUST_WRITE]) {
+      if (node[MUST_WRITE] !== undefined) {
         this.writeFile_(node);
       }
 
@@ -133,23 +119,26 @@ class FileStore {
   writeFile_(node) {
     let ptr = node[PTR];
     let path = join(this.dir, ptr);
-    let promise = new Promise((resolve, reject) => {
-      writeFile(path, JSON.stringify(node), (error) => {
-        if (error)
-          reject(error);
-        else
-          resolve();
+    let text = node[MUST_WRITE];
+    let promise = writeFile(path, text).catch(error => {
+      if (error.code !== "ENOENT")
+        throw error;
+      return mkdir(join(this.dir, dirname(ptr))).catch(error => {
+        if (error.code !== "EEXIST")
+          throw error;
+      }).then(() => {
+        return writeFile(path, text);
       });
     }).then(() => {
       this.writing.delete(ptr);
     });
-    node[MUST_WRITE] = false;
+    node[MUST_WRITE] = undefined;
     this.writing.set(ptr, { node, promise });
   }
 
   flush() {
     for (let [ptr, node] of this.cache) {
-      if (node[MUST_WRITE])
+      if (node[MUST_WRITE] !== undefined)
         this.writeFile_(node);
     }
 
@@ -167,36 +156,16 @@ class FileStore {
 
   readIndexPtr() {
     let indexPath = join(this.dir, "index");
-    return new Promise((resolve, reject) => {
-      readFile(indexPath, { encoding: "utf-8" }, (error, data) => {
-        if (error)
-          reject(error);
-        else
-          resolve(data);
-      })
-    });
+    return readFile(indexPath, { encoding: "utf-8" });
   }
 
   writeIndexPtr(ptr) {
-    let tempPath = join(this.dir, this.nextPtr());
+    let tempPath = join(this.dir, "index.tmp");
     let indexPath = join(this.dir, "index");
-    return new Promise((resolve, reject) => {
-      writeFile(tempPath, ptr, error => {
-        if (error)
-          reject(error);
-        else
-          resolve();
-      });
-    }).then(() => {
-      return new Promise((resolve, reject) => {
-        rename(tempPath, indexPath, error => {
-          if (error)
-            reject(error);
-          else
-            resolve();
-        });
-      }).catch(error => {
-        unlink(tempPath, error => {});
+    return writeFile(tempPath, ptr).then(() => {
+      return rename(tempPath, indexPath);
+    }).catch(error => {
+      return unlink(tempPath).then(() => {;
         throw error;
       });
     });
