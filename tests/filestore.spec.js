@@ -48,8 +48,8 @@ describe("FileStore", function() {
     let ptr1 = this.node1[PTR];
     this.store.write(this.node2);
     let ptr2 = this.node2[PTR];
-    expect(String(ptr1)).to.equal(this.ptr1);
-    expect(String(ptr2)).to.equal(this.ptr2);
+    expect(ptr1).to.equal(this.ptr1);
+    expect(ptr2).to.equal(this.ptr2);
   })
 
   it("can read cached written nodes before flush", function() {
@@ -139,7 +139,7 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     let ptr1 = this.node1[PTR];
     return this.store.sync().then(() => {
-      let path = join(TEMP_DIR, String(ptr1));
+      let path = join(TEMP_DIR, ptr1);
 
       // Corrupt the node file
       writeFileSync(path, "!");
