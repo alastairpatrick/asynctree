@@ -82,11 +82,7 @@ class FileStore {
         return Promise.reject(`Node ${ptr} was deleted before writing to file.`);
     }
 
-    let path = join(this.dir, ptr);
-
-    if (this.config.compress)
-      path += ".gz";
-
+    let path = this.ptrPath_(ptr);
     let promise = readFile(path);
     
     if (this.config.compress)
@@ -127,15 +123,17 @@ class FileStore {
     }
 
     // Otherwise, delete file asynchronously.
-    let path = join(this.dir, ptr);    
-    this.schedulePtrTask_(ptr, undefined, () => unlink(path));
+    let path = this.ptrPath_(ptr);    
+    this.schedulePtrTask_(ptr, undefined, () => {
+      return unlink(path);
+    });
   }
 
   schedulePtrTask_(ptr, node, task) {
     let discrepancy = this.discrepancies.get(ptr);
     if (discrepancy === undefined) {
       discrepancy = {
-        node: undefined,
+        node: 1,
         count: 0,
         promise: Promise.resolve(),
       };
@@ -144,7 +142,11 @@ class FileStore {
 
     discrepancy.node = node;
     ++discrepancy.count;
-    discrepancy.promise = discrepancy.promise.then(task).then(() => {
+    discrepancy.promise = discrepancy.promise.then(task).catch(error => {
+      if (--discrepancy.count === 0)
+        this.discrepancies.delete(ptr);
+      throw error;
+    }).then(() => {
       if (--discrepancy.count === 0)
         this.discrepancies.delete(ptr);
     });
@@ -180,6 +182,13 @@ class FileStore {
     return this.writeFileAtomic_(indexPath, ptr, { mode: this.config.fileMode });
   }
 
+  ptrPath_(ptr) {
+    let path = join(this.dir, ptr);
+    if (this.config.compress)
+      path += ".gz";
+    return path;  
+  }
+
   hash_(text) {
     let hash = this.createHash();
     hash.update(text);
@@ -205,11 +214,9 @@ class FileStore {
 
   writeNodeFile_(node) {
     let ptr = node[PTR];
-    let path = join(this.dir, ptr);
+    let path = this.ptrPath_(ptr);
     let text = node[MUST_WRITE];
     node[MUST_WRITE] = undefined;
-    if (this.config.compress)
-      path += ".gz";
 
     this.schedulePtrTask_(ptr, node, () => {
       let promise;

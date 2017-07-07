@@ -63,7 +63,7 @@ fileStoreFactory.after = (store) => {
   });
 }
 
-[testStoreFactory, fileStoreFactory].forEach(factory => {
+[fileStoreFactory, testStoreFactory].forEach(factory => {
   describe("Tree", function() {
     beforeEach(function() {
       this.sandbox = sinon.sandbox.create();
@@ -77,9 +77,10 @@ fileStoreFactory.after = (store) => {
     })
 
     afterEach(function() {
+      this.timeout(60000);
       this.sandbox.restore();
       return factory.after(this.store);
-    });
+    })
 
     describe("round trips", function() {
       it("unit height tree", function() {
@@ -1132,6 +1133,49 @@ fileStoreFactory.after = (store) => {
           });
         });
       })
+    })
+
+
+    describe("fuzz", function() {
+      it("insert and delete", function(done) {
+        let tree = new Tree(this.store, this.emptyNodePtr);
+
+        let i = 0;
+        let id;
+
+        const doRandom = () => {
+          if (i >= 20000 && id !== undefined) {
+            clearInterval(id);
+            id = undefined;
+            return this.store.flush().then(() => {
+              done();
+            });
+          }
+
+          ++i;
+          if (i % 1000 === 0)
+            console.log(i);
+
+          let key = Math.random().toString(16).substring(2, 6);
+          let value = Math.random().toString(36).substring(2);
+
+          let promise;
+          if (i % 3 === 0)
+            promise = tree.delete(key);
+          else
+            promise = tree.set(key, value);
+
+          return promise.catch(() => {}).then(() => {
+            if (i % 100 === 0)
+              return;
+
+            return doRandom();
+          });
+        }
+
+        id = setInterval(doRandom, 0);
+        doRandom();
+      }).timeout(60000);
     })
   })
 })
