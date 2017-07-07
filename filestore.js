@@ -45,6 +45,36 @@ const ensureDir = (dir) => {
   })
 }
 
+// FileStore pointers are quite expensive to calculate since they are the hash digest of the JSON
+// string for the corresponding node. The majority of nodes are never written to files and hashing
+// them would be expensive and wasteful. Ptr objects defer hashing the corresponding node until
+// either the pointer has to be serialzed to JSON or the referenced node is about to be written
+// to a file and so its hash digest is actually needed.
+class Ptr {
+  constructor(store, node) {
+    this.store = store;
+    this.node = node;
+    this.json = undefined;
+  }
+
+  build(text) {
+    this.value = this.store.hash_(text);
+    this.node = undefined;
+  }
+
+  toString() {
+    if (this.value !== undefined)
+      return this.value;
+
+    this.build(JSON.stringify(this.node));
+    return this.value;
+  }
+
+  toJSON() {
+    return this.toString();
+  }
+}
+
 class FileStore {
   constructor(dir, config={}) {
     this.dir = dir;
@@ -82,7 +112,7 @@ class FileStore {
         return Promise.reject(`Node ${ptr} was deleted before writing to file.`);
     }
 
-    let path = join(this.dir, ptr);
+    let path = join(this.dir, String(ptr));
 
     if (this.config.compress)
       path += ".gz";
@@ -104,15 +134,15 @@ class FileStore {
     return promise.then(text => {
       let node = JSON.parse(text);
       node[PTR] = ptr;
+      node[MUST_WRITE] = false;
       this.cache_(node);
       return node;
     });
   }
 
   write(node) {
-    let text = JSON.stringify(node);
-    let ptr = this.hash_(text);
-    node[MUST_WRITE] = text;
+    let ptr = new Ptr(this, node);
+    node[MUST_WRITE] = true;
     node[PTR] = ptr;
     this.cache_(node);
   }
@@ -122,13 +152,15 @@ class FileStore {
     let node = this.cache.get(ptr);
     if (node !== undefined) {
       this.cache.delete(ptr);
-      if (node[MUST_WRITE] !== undefined)
+      if (node[MUST_WRITE])
         return;
     }
 
     // Otherwise, delete file asynchronously.
-    let path = join(this.dir, ptr);    
-    this.schedulePtrTask_(ptr, undefined, () => unlink(path));
+    let path = join(this.dir, String(ptr));    
+    this.schedulePtrTask_(ptr, undefined, () => {
+      return unlink(path)
+    });
   }
 
   schedulePtrTask_(ptr, node, task) {
@@ -152,7 +184,7 @@ class FileStore {
 
   flush() {
     for (let [ptr, node] of this.cache) {
-      if (node[MUST_WRITE] !== undefined)
+      if (node[MUST_WRITE])
         this.writeNodeFile_(node);
     }
 
@@ -196,7 +228,7 @@ class FileStore {
       if (this.cache.size <= this.config.cacheSize)
         break;
 
-      if (node[MUST_WRITE] !== undefined)
+      if (node[MUST_WRITE])
         this.writeNodeFile_(node);
      
       this.cache.delete(ptr);
@@ -205,9 +237,10 @@ class FileStore {
 
   writeNodeFile_(node) {
     let ptr = node[PTR];
-    let path = join(this.dir, ptr);
-    let text = node[MUST_WRITE];
-    node[MUST_WRITE] = undefined;
+    let text = JSON.stringify(node);
+    ptr.build(text);
+    let path = join(this.dir, String(ptr));
+    node[MUST_WRITE] = false;
     if (this.config.compress)
       path += ".gz";
 
@@ -242,9 +275,11 @@ class FileStore {
     return writeFile(tempPath, data, options).then(() => {
       return rename(tempPath, path).catch(error => {
         return unlink(tempPath).catch(() => {
-          throw error;
+          if (error.code !== "EEXIST" && error.code !== "EPERM")
+            throw error;
         }).then(() => {
-          throw error;
+          if (error.code !== "EEXIST" && error.code !== "EPERM")
+            throw error;
         });
       });
     });
