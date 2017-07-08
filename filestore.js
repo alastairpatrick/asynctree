@@ -212,14 +212,20 @@ class FileStore {
     return Promise.all(promises);
   }
 
-   readIndexPtr() {
-    let indexPath = join(this.dir, "index");
-    return readFile(indexPath, { encoding: "utf-8" });
+  sync() {
+    return this.flush().then(() => {
+      this.cache.clear();
+    });
   }
 
-  writeIndexPtr(ptr) {
-    let indexPath = join(this.dir, "index");
-    return this.writeFileAtomic_(indexPath, ptr, { mode: this.config.fileMode });
+  readMeta(path) {
+    let indexPath = join(this.dir, path);
+    return readFile(indexPath, { encoding: "utf-8" }).then(JSON.parse);
+  }
+
+  writeMeta(path, index) {
+    let indexPath = join(this.dir, path);
+    return this.writeFileAtomic_(indexPath, JSON.stringify(index), { mode: this.config.fileMode });
   }
 
   ptrPath_(ptr) {

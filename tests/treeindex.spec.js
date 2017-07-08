@@ -13,7 +13,7 @@ const has = Object.prototype.hasOwnProperty;
 describe("TreeIndex", function() {
   beforeEach(function() {
     this.store = new TestStore();
-    return TreeIndex.open(this.store, {
+    return TreeIndex.open(this.store, "index", {
       index: "config",
     }).then(index_ => {
       this.treeIndex = index_;

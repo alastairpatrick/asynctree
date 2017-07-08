@@ -20,30 +20,15 @@ class HttpStore {
       return node;
     }
 
-    let uri = this.prefix + ptr;
-    return new Promise((resolve, reject) => {
-      let request = new XMLHttpRequest();
-      request.open("GET", uri);
-      request.setRequestHeader("Accept", "application/json");
-      request.responseType = "json";
-      request.onreadystatechange = () => {
-        if (request.readyState !== 4)
-          return;
-
-        if (request.status === 200)
-          resolve(request.response);
-        else
-          reject(new Error(request.statusText));
-      };
-      request.onerror = () => {
-        reject(new Error(request.statusText));
-      };
-      request.send();
-    }).then(node => {
+    return this.downloadJSON_(this.prefix + ptr).then(node => {
       node[PTR] = ptr;
       this.cache_(node);
       return node;
     });
+  }
+
+  readMeta(path) {
+    return this.downloadJSON_(this.prefix + path);
   }
 
   cache_(node) {
@@ -64,6 +49,28 @@ class HttpStore {
       this.timeoutId = undefined;
       this.cache.clear();
     }, this.cacheTimeout);
+  }
+
+  downloadJSON_(uri) {
+    return new Promise((resolve, reject) => {
+      let request = new XMLHttpRequest();
+      request.open("GET", uri);
+      request.setRequestHeader("Accept", "application/json");
+      request.responseType = "json";
+      request.onreadystatechange = () => {
+        if (request.readyState !== 4)
+          return;
+
+        if (request.status === 200)
+          resolve(request.response);
+        else
+          reject(new Error(request.statusText));
+      };
+      request.onerror = () => {
+        reject(new Error(request.statusText));
+      };
+      request.send();
+    });
   }
 }
 

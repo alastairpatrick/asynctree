@@ -33,12 +33,12 @@ class TestStore {
     delete this.nodes[ptr];
   }
 
-  readIndexPtr() {
-    return Promise.resolve(this.indexPtr);
+  readMeta(path) {
+    return Promise.resolve(this.index);
   }
 
-  writeIndexPtr(ptr) {
-    this.indexPtr = ptr;
+  writeMeta(path, index) {
+    this.index = index;
     return Promise.resolve();
   }
 

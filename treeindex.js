@@ -15,16 +15,20 @@ const writeEmpty = (store) => {
 }
 
 class TreeIndex {
-  static open(store, config={}, TreeClass=Tree) {
-    return store.readIndexPtr().then(rootPtr => {
-      if (rootPtr === undefined)
+  static open(store, indexPath="index", config={}, TreeClass=Tree) {
+    return store.readMeta(indexPath).then(index => {
+      let rootPtr;
+      if (index === undefined)
         rootPtr = writeEmpty(store);
-      return new TreeIndex(store, rootPtr, config, TreeClass);
+      else
+        rootPtr = index.rootPtr;
+      return new TreeIndex(store, indexPath, rootPtr, config, TreeClass);
     });
   }
   
-  constructor(store, rootPtr, config, TreeClass) {
+  constructor(store, indexPath, rootPtr, config, TreeClass) {
     this.store = store;
+    this.indexPath = indexPath;
     this.trees = new Tree(this.store, rootPtr);
     this.config = config;
     this.TreeClass = TreeClass;
@@ -64,7 +68,10 @@ class TreeIndex {
 
     return this.trees.bulk(bulk).then(() => {
       this.trees.commit();
-      return this.store.writeIndexPtr(this.trees.rootPtr);
+      let index = {
+        rootPtr: this.trees.rootPtr,
+      };
+      return this.store.writeMeta(this.indexPath, index);
     });
   }
 }

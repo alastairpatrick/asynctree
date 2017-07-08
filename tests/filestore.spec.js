@@ -211,9 +211,10 @@ describe("FileStore", function() {
 
   it("throws exception if hash doesn't match file", function() {
     this.store.config.verifyHash = true;
+    this.store.compress = false;
     this.store.config.fileMode = 0o666;  // So node files can be corrupted easily
     this.store.write(this.node1);
-    return this.store.flush().then(() => {
+    return this.store.sync().then(() => {
       // Corrupt the node file
       writeFileSync(join(TEMP_DIR, String(this.ptr1)), "!");
 
@@ -226,17 +227,17 @@ describe("FileStore", function() {
   })
 
   it("writes index", function() {
-    return this.store.writeIndexPtr(this.ptr1).then(() => {
+    return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
       let indexPath = join(TEMP_DIR, "index");
-      expect(readFileSync(indexPath, { encoding: "utf-8" })).to.equal(this.ptr1);
+      expect(JSON.parse(readFileSync(indexPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
   it("reads index", function() {
-    return this.store.writeIndexPtr(this.ptr1).then(() => {
-      return this.store.readIndexPtr();
-    }).then(ptr => {
-      expect(ptr).to.equal(this.ptr1);      
+    return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
+      return this.store.readMeta("index");
+    }).then(index => {
+      expect(index).to.deep.equal({ rootPtr: this.ptr1 });      
     });
   });
 })
