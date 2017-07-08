@@ -1136,10 +1136,40 @@ fileStoreFactory.after = (store) => {
     })
 
     describe("fuzz", function() {
+      it("bulk insert and delete", function(done) {
+        let tree = new Tree(this.store, this.emptyNodePtr);
+
+        let i = 0;
+
+        const doRandom = () => {
+          i += 1000;
+          if (i % 1000 === 0)
+            console.log(i);
+
+          let changes = [];
+          for (let j = 0; j < 1000; ++j) {
+            let key = Math.random().toString(16).substring(2, 6);
+            let value = Math.random().toString(36).substring(2);
+            changes.push([key, value]);
+          }
+          let promise = tree.bulk(changes);
+
+          return promise.catch(() => {}).then(() => {
+            if (i >= 20000) {
+              return this.store.flush().then(() => {
+                done();
+              });
+            }
+
+            setTimeout(doRandom, 0);
+          });
+        }
+
+        doRandom();
+      }).timeout(600000);
+      
       it("insert and delete", function(done) {
-        let tree = new Tree(this.store, this.emptyNodePtr, {
-          order: 1024,
-        });
+        let tree = new Tree(this.store, this.emptyNodePtr);
 
         let i = 0;
 
@@ -1152,11 +1182,12 @@ fileStoreFactory.after = (store) => {
           let value = Math.random().toString(36).substring(2);
 
           let promise;
-          promise = tree.set(key, value);
+          if (i % 3 === 0)
+            promise = tree.delete(key);
+          else
+            promise = tree.set(key, value);
 
-          return promise.catch(error => {
-            expect.fail(error);
-          }).then(() => {
+          return promise.catch(() => {}).then(() => {
             if (i >= 20000) {
               return this.store.flush().then(() => {
                 done();
@@ -1169,7 +1200,7 @@ fileStoreFactory.after = (store) => {
           });
         }
 
-        doRandom()
+        doRandom();
       }).timeout(600000);
     })
   })
