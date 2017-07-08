@@ -19,8 +19,8 @@ const rename = promisify(fs.rename);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
 
-const deflate = promisify(zlib.deflate);
-const unzip = promisify(zlib.unzip);
+const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.gunzip);
 
 const tempDir = fs.mkdtempSync(join(os.tmpdir(), "filestore"));
 let tempCount = 0;
@@ -125,7 +125,7 @@ class FileStore {
         let promise = readFile(path);
         
         if (this.config.compress)
-          promise = promise.then(unzip);
+          promise = promise.then(gunzip);
       
         if (this.config.verifyHash) {
           promise = promise.then(text => {
@@ -261,7 +261,7 @@ class FileStore {
     this.schedulePathTask_(path, () => {
       let promise;
       if (this.config.compress) {
-        promise = deflate(text);
+        promise = gzip(text);
       } else {
         promise = Promise.resolve(text);
       }
