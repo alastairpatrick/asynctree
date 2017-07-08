@@ -1,3 +1,5 @@
+"use strict";
+
 const { createHash } = require("crypto");
 const fs = require("fs");
 const os = require("os");
