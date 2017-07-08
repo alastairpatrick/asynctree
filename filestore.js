@@ -72,9 +72,10 @@ class FileStore {
   constructor(dir, config) {
     this.dir = dir;
     this.config = Object.assign({
-      cacheSize: 12,
+      cacheSize: 256,
       compress: true,
       fileMode: 0o444,
+      maxConcurrentIO: 4,
       verifyHash: false,
     }, config);
 
@@ -90,52 +91,61 @@ class FileStore {
   }
 
   read(ptr) {
-    if (typeof ptr !== "string") {
-      if (ptr.node !== undefined) {
-        return Promise.resolve(ptr.node);
-      } else {
-        if (ptr.hash === undefined)
-          return Promise.reject(new Error("Pointer was deleted"));
-        else
-          ptr = ptr.hash;
-      }
+    // Wait until the number of IO operations falls below the limit so we don't exceed the system's file
+    // handle limit.
+    const throttle = () => {
+      if (this.pathTasks.size <= this.config.maxConcurrentIO)
+        return Promise.resolve();
+
+      let promises = [];
+      for (let pathTask of this.pathTasks.values())
+        promises.push(pathTask.promise);
+        
+      return Promise.race(promises).then(throttle);
     }
-    
-    let node = this.cache.get(ptr);
-    if (node !== undefined)
-      return Promise.resolve(node);
 
-    let path = this.ptrPath_(ptr);
-    return this.schedulePathTask_(path, () => {
-      let promise = readFile(path);
-      
-      if (this.config.compress)
-        promise = promise.then(unzip);
-    
-      if (this.config.verifyHash) {
-        promise = promise.then(text => {
-          let hash = this.hash_(text);
-          if (String(ptr) !== hash)
-            throw new Error(`Data for node '${ptr}' does not match hash digest.`);
-          return text;
-        });
+    return throttle().then(() => {
+      if (typeof ptr !== "string") {
+        if (ptr.node !== undefined) {
+          return ptr.node;
+        } else {
+          if (ptr.hash === undefined)
+            throw new Error("Pointer was deleted");
+          else
+            ptr = ptr.hash;
+        }
       }
+      
+      let node = this.cache.get(ptr);
+      if (node !== undefined)
+        return node;
 
-      return promise.then(text => {
-        let node = JSON.parse(text);
-        node[PTR] = ptr;
-
-        this.cache.delete(ptr);
-        this.cache.set(ptr, node);
-        for (let [evictPtr, evictNode] of this.cache) {
-          if (this.cache.size <= this.config.cacheSize)
-            break;
-          this.cache.delete(evictPtr);
+      let path = this.ptrPath_(ptr);
+      return this.schedulePathTask_(path, () => {
+        let promise = readFile(path);
+        
+        if (this.config.compress)
+          promise = promise.then(unzip);
+      
+        if (this.config.verifyHash) {
+          promise = promise.then(text => {
+            let hash = this.hash_(text);
+            if (String(ptr) !== hash)
+              throw new Error(`Data for node '${ptr}' does not match hash digest.`);
+            return text;
+          });
         }
 
-        return node;
-      }).catch(error => {
-        throw error;
+        return promise.then(text => {
+          let node = JSON.parse(text);
+          node[PTR] = ptr;
+
+          this.cache.delete(ptr);
+          this.cache_(ptr, node);
+          return node;
+        }).catch(error => {
+          throw error;
+        });
       });
     });
   }
@@ -196,7 +206,7 @@ class FileStore {
     }
 
     let promises = [];
-    for (let [path, task] of this.pathTasks)
+    for (let task of this.pathTasks.values())
       promises.push(task.promise);
     
     return Promise.all(promises);
@@ -232,10 +242,21 @@ class FileStore {
     return hash;
   }
 
+  cache_(ptr, node) {
+    this.cache.set(ptr, node);
+    for (let evictPtr of this.cache.keys()) {
+      if (this.cache.size <= this.config.cacheSize)
+        break;
+      this.cache.delete(evictPtr);
+    }
+  }
+
   writeNodeFile_(node) {
     let text = JSON.stringify(node);
     node[PTR].build(text);
     let path = this.ptrPath_(node[PTR]);
+    node[PTR].node = undefined;
+    this.cache_(node[PTR].hash, node);
 
     this.schedulePathTask_(path, () => {
       let promise;
@@ -255,8 +276,6 @@ class FileStore {
           }).then(() => {
             return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
           });
-        }).then(() => {
-          node[PTR].node = undefined;
         });
       });
     });

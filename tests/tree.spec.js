@@ -1136,7 +1136,7 @@ fileStoreFactory.after = (store) => {
     })
 
     describe("fuzz", function() {
-      it("bulk insert and delete", function(done) {
+      it("bulk insert", function(done) {
         let tree = new Tree(this.store, this.emptyNodePtr);
 
         let i = 0;
@@ -1161,7 +1161,7 @@ fileStoreFactory.after = (store) => {
               });
             }
 
-            setTimeout(doRandom, 0);
+            return doRandom();
           });
         }
 
@@ -1192,8 +1192,6 @@ fileStoreFactory.after = (store) => {
               return this.store.flush().then(() => {
                 done();
               });
-            } else if (i % 100 === 0) {
-              setTimeout(doRandom, 0);
             } else {
               return doRandom();
             }
