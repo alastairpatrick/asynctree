@@ -21,7 +21,7 @@ class TestStore {
   }
 
   write(node) {
-    let ptr = ++this.ptr;
+    let ptr = this.ptr++;
     node[PTR] = ptr;
     this.nodes[ptr] = cloneNode(node);
   }

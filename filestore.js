@@ -11,9 +11,7 @@ const MUST_WRITE = Symbol("MUST_WRITE");
 
 const has = Object.prototype.hasOwnProperty;
 
-const close = promisify(fs.close);
 const mkdir = promisify(fs.mkdir);
-const open = promisify(fs.open);
 const readFile = promisify(fs.readFile);
 const rename = promisify(fs.rename);
 const unlink = promisify(fs.unlink);
@@ -36,7 +34,6 @@ const cleanup = () => {
 
 process.on("exit", cleanup);
 process.on("SIGINT", cleanup);
-process.on("uncaughtException", cleanup);
 
 const ensureDir = (dir) => {
   return mkdir(dir).catch(error => {
@@ -45,8 +42,32 @@ const ensureDir = (dir) => {
   })
 }
 
+class Ptr {
+  constructor(store, node) {
+    this.store = store;
+    this.node = node;
+    this.hash = undefined;
+  }
+
+  build(text) {
+    if (this.hash === undefined);
+      this.hash = this.store.hash_(text);
+  }
+
+  toJSON() {
+    if (this.hash !== undefined)
+      return this.hash;
+    
+    if (this.node === undefined)
+      this.hash = null;
+    else
+      this.build(JSON.stringify(this.node));
+    return this.hash;
+  }
+}
+
 class FileStore {
-  constructor(dir, config={}) {
+  constructor(dir, config) {
     this.dir = dir;
     this.config = Object.assign({
       cacheSize: 12,
@@ -55,124 +76,131 @@ class FileStore {
       verifyHash: false,
     }, config);
 
+    this.pathTasks = new Map();
+    this.writes = new Set();
     this.cache = new Map();
-
-    // Changes that are effective but in progress of being written to files.
-    this.discrepancies = new Map();
   }
-
-  createHash() {
+  
+  createHasher() {
     // Not intended to be resilient to deliberate collisions attempts. When that's an issue, override
     // this function to use another hash function or HMAC.
     return createHash("md5");
   }
 
   read(ptr) {
+    if (typeof ptr !== "string") {
+      if (ptr.node !== undefined) {
+        return Promise.resolve(cloneNode(ptr.node));
+      } else {
+        if (ptr.hash === undefined)
+          return Promise.reject(new Error("Pointer was deleted"));
+        else
+          ptr = ptr.hash;
+      }
+    }
+    
     let node = this.cache.get(ptr);
-    if (node !== undefined) {
-      this.cache_(node);
-      return Promise.resolve(cloneNode(node));      
-    }
-
-    let discrepancy = this.discrepancies.get(ptr);  
-    if (discrepancy !== undefined) {
-      if (discrepancy.node !== undefined)
-        return Promise.resolve(cloneNode(discrepancy.node));
-      else
-        return Promise.reject(`Node ${ptr} was deleted before writing to file.`);
-    }
+    if (node !== undefined)
+      return Promise.resolve(cloneNode(node));
 
     let path = this.ptrPath_(ptr);
-    let promise = readFile(path);
+    return this.schedulePathTask_(path, () => {
+      let promise = readFile(path);
+      
+      if (this.config.compress)
+        promise = promise.then(unzip);
     
-    if (this.config.compress)
-      promise = promise.then(unzip);
+      if (this.config.verifyHash) {
+        promise = promise.then(text => {
+          let hash = this.hash_(text);
+          if (String(ptr) !== hash)
+            throw new Error(`Data for node '${ptr}' does not match hash digest.`);
+          return text;
+        });
+      }
+
+      return promise.then(text => {
+        let node = JSON.parse(text);
+        node[PTR] = ptr;
+
+        this.cache.delete(ptr);
+        this.cache.set(ptr, node);
+        for (let [evictPtr, evictNode] of this.cache) {
+          if (this.cache.size <= this.config.cacheSize)
+            break;
+          this.cache.delete(evictPtr);
+        }
+
+        return node;
+      }).catch(error => {
+        throw error;
+      });
+    });
+  }
   
-    if (this.config.verifyHash) {
-      promise = promise.then(text => {
-        let hash = this.hash_(text);
-        if (ptr !== hash)
-          throw new Error(`Data for node '${ptr}' is does not match hash digest.`);
-        return text;
+  write(node) {
+    let ptr = new Ptr(this, node);
+    node[PTR] = ptr;
+    this.writes.add(node);
+
+    for (let evictNode of this.writes) {
+      if (this.writes.size <= this.config.cacheSize)
+        break;
+      this.writeNodeFile_(evictNode);
+      this.writes.delete(evictNode);
+    }
+  }
+  
+  delete(ptr) {
+    if (typeof ptr === "string")
+      return Promise.reject(new Error("Cannot delete node that was not written by this store."));
+
+    if (!this.writes.delete(ptr.node)) {
+      let path = this.ptrPath_(ptr);
+      this.schedulePathTask_(path, () => {
+        return unlink(path);
       });
     }
 
-    return promise.then(text => {
-      let node = JSON.parse(text);
-      node[PTR] = ptr;
-      this.cache_(node);
-      return node;
-    });
+    ptr.node = undefined;
+    ptr.hash = undefined;
   }
-
-  write(node) {
-    let text = JSON.stringify(node);
-    let ptr = this.hash_(text);
-    node[MUST_WRITE] = text;
-    node[PTR] = ptr;
-    this.cache_(node);
-  }
-
-  delete(ptr) {
-    // The most commomn case: if the node was never written to file then only need to delete from cache.
-    let node = this.cache.get(ptr);
-    if (node !== undefined) {
-      this.cache.delete(ptr);
-      if (node[MUST_WRITE] !== undefined)
-        return;
-    }
-
-    // Otherwise, delete file asynchronously.
-    let path = this.ptrPath_(ptr);    
-    this.schedulePtrTask_(ptr, undefined, () => {
-      return unlink(path);
-    });
-  }
-
-  schedulePtrTask_(ptr, node, task) {
-    let discrepancy = this.discrepancies.get(ptr);
-    if (discrepancy === undefined) {
-      discrepancy = {
-        node: 1,
+  
+  schedulePathTask_(path, task) {
+    let pathTask = this.pathTasks.get(path);
+    if (pathTask === undefined) {
+      pathTask = {
         count: 0,
         promise: Promise.resolve(),
       };
-      this.discrepancies.set(ptr, discrepancy);
+      this.pathTasks.set(path, pathTask);
     }
-
-    discrepancy.node = node;
-    ++discrepancy.count;
-    discrepancy.promise = discrepancy.promise.then(task).catch(error => {
-      if (--discrepancy.count === 0)
-        this.discrepancies.delete(ptr);
+    ++pathTask.count;
+    return pathTask.promise = pathTask.promise.then(task).catch(error => {
+      if (--pathTask.count === 0)
+        this.pathTasks.delete(path);
       throw error;
-    }).then(() => {
-      if (--discrepancy.count === 0)
-        this.discrepancies.delete(ptr);
+    }).then(result => {
+      if (--pathTask.count === 0)
+        this.pathTasks.delete(path);
+      return result;
     });
   }
 
+
   flush() {
-    for (let [ptr, node] of this.cache) {
-      if (node[MUST_WRITE] !== undefined)
-        this.writeNodeFile_(node);
+    for (let node of this.writes) {
+      this.writeNodeFile_(node);
     }
 
     let promises = [];
-    for (let [ptr, discrepancy] of this.discrepancies) {
-      promises.push(discrepancy.promise);
-    }
-
+    for (let [path, task] of this.pathTasks)
+      promises.push(task.promise);
+    
     return Promise.all(promises);
   }
 
-  sync() {
-    return this.flush().then(() => {
-      this.cache.clear();
-    });
-  }
-
-  readIndexPtr() {
+   readIndexPtr() {
     let indexPath = join(this.dir, "index");
     return readFile(indexPath, { encoding: "utf-8" });
   }
@@ -183,42 +211,31 @@ class FileStore {
   }
 
   ptrPath_(ptr) {
-    let path = join(this.dir, ptr);
+    let path;
+    if (typeof ptr === "string")
+      path = ptr;
+    else
+      path = ptr.toJSON();
+    path = join(this.dir, path);
     if (this.config.compress)
       path += ".gz";
-    return path;  
+    return path;
   }
 
   hash_(text) {
-    let hash = this.createHash();
-    hash.update(text);
-    let ptr = hash.digest("hex");
-    ptr = ptr.substring(0, 2) + "/" + ptr.substring(2);
-    return ptr;
-  }
-
-  cache_(node) {
-    this.cache.delete(node);
-    this.cache.set(node[PTR], node);
-
-    for (let [ptr, node] of this.cache) {
-      if (this.cache.size <= this.config.cacheSize)
-        break;
-
-      if (node[MUST_WRITE] !== undefined)
-        this.writeNodeFile_(node);
-     
-      this.cache.delete(ptr);
-    }
+    let hasher = this.createHasher();
+    hasher.update(text);
+    let hash = hasher.digest("hex");
+    hash = hash.substring(0, 2) + "/" + hash.substring(2);
+    return hash;
   }
 
   writeNodeFile_(node) {
-    let ptr = node[PTR];
-    let path = this.ptrPath_(ptr);
-    let text = node[MUST_WRITE];
-    node[MUST_WRITE] = undefined;
+    let text = JSON.stringify(node);
+    node[PTR].build(text);
+    let path = this.ptrPath_(node[PTR]);
 
-    this.schedulePtrTask_(ptr, node, () => {
+    this.schedulePathTask_(path, () => {
       let promise;
       if (this.config.compress) {
         promise = deflate(text);
@@ -236,6 +253,8 @@ class FileStore {
           }).then(() => {
             return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
           });
+        }).then(() => {
+          node[PTR].node = undefined;
         });
       });
     });
@@ -249,9 +268,14 @@ class FileStore {
     return writeFile(tempPath, data, options).then(() => {
       return rename(tempPath, path).catch(error => {
         return unlink(tempPath).catch(() => {
-          throw error;
+          if (error.code !== "EPERM")
+            throw error;
         }).then(() => {
-          throw error;
+          // Windows doesn't allow one file to be renamed over another; instead its an error. Can ignore the
+          // error because the target file had the same hash and therefore content as the file intended as its
+          // replacement.
+          if (error.code !== "EPERM")
+            throw error;
         });
       });
     });

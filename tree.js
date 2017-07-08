@@ -104,7 +104,7 @@ class Tree {
     } catch (error) {
       this.rootPtr = this.tx.rollback();
       this.oldTx = oldTx;
-      throw error;      
+      return Promise.reject(error);      
     }
   }
 
@@ -143,6 +143,8 @@ class Tree {
       keys: [],
       children: [this.rootPtr],
     };
+    if (this.rootPtr === undefined)
+      throw new Error("Operation in progress");
     this.rootPtr = undefined;
     return this.setSubTree_(key, value, dummyRoot, type, this.tx).then(({ node }) => {
       if (dummyRoot.children.length === 1) {
@@ -220,6 +222,8 @@ class Tree {
   }
 
   delete_(key) {
+    if (this.rootPtr === undefined)
+      throw new Error("Operation in progress");
     let rootPtr = this.rootPtr;
     this.rootPtr = undefined;
     return this.tx.read(rootPtr).then(node => {
@@ -374,6 +378,8 @@ class Tree {
    * @returns {Promise} Fulfilled after iteration has completed.
    */
   rangeEach(lower, upper, cb, context) {
+    if (this.rootPtr === undefined)
+      throw new Error("Operation in progress");
     return this.tx.read(this.rootPtr).then(node => {
       return this.rangeEach_(lower, upper, cb, context, node);
     });

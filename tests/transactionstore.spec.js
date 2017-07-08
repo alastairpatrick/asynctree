@@ -119,5 +119,21 @@ describe("TransactionStore", function() {
       this.tx.rollback();
       expect(this.store.nodes[ptr]).to.be.undefined;
     })
+
+    it("does not delete node deleted in child transaction if child transaction wrote it back", function() {
+      let node = { keys: [1], values: [1] };
+      this.tx.write(node);
+      let ptr = node[PTR];
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+
+      this.childTx.delete(ptr);
+
+      // Reuse pointer of deleted node.
+      this.store.ptr = ptr;
+      this.childTx.write(node);
+
+      this.childTx.commit();
+      expect(this.store.nodes[ptr]).to.deep.equal(node);
+    })
   })
 })

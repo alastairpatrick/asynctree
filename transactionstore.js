@@ -16,7 +16,9 @@ class TransactionStore {
 
   write(node) {
     this.parent.write(node);
-    this.undos.add(node[PTR]);
+    let ptr = node[PTR];
+    this.applies.delete(ptr);
+    this.undos.add(ptr);
   }
 
   delete(ptr) {

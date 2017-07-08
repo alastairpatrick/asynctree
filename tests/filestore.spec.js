@@ -35,6 +35,11 @@ describe("FileStore", function() {
       cacheSize: Infinity,
       compress: false,
     });
+
+    this.store2 = new FileStore(TEMP_DIR, {
+      cacheSize: Infinity,
+      compress: false,
+    });
   })
 
   afterEach(function() {
@@ -43,179 +48,180 @@ describe("FileStore", function() {
     });
   });
 
-  it("assigns pointers to written nodes", function() {
+  it("can read written nodes", function() {
     this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-    this.store.write(this.node2);
-    let ptr2 = this.node2[PTR];
-    expect(ptr1).to.equal(this.ptr1);
-    expect(ptr2).to.equal(this.ptr2);
-  })
-
-  it("can read cached written nodes before flush", function() {
-    this.store.write(this.node1);
-    let ptr = this.node1[PTR];
-    return this.store.read(ptr).then(node => {
+    return this.store.read(this.node1[PTR]).then(node => {
       expect(node).to.deep.equal(this.node1);
-      expect(node[PTR]).to.equal(ptr);
       expect(node).to.not.equal(this.node1);
     });
   })
 
+  it("cannot read deleted nodes", function() {
+    this.store.write(this.node1);
+    this.store.delete(this.node1[PTR]);
+    return this.store.read(this.node1[PTR]).then(() => {
+      expect.fail("Did not throw");
+    }).catch(error => {
+      expect(error).to.match(/delete/);
+    });
+  })
+
+  it("JSON representation of pointer is hash of Merkle tree rooted at corresponding node", function() {
+    this.store.write(this.node1);
+    let parentNode = {
+      keys: [],
+      children: [this.node1[PTR]],
+    };
+    this.store.write(parentNode);
+    expect(parentNode[PTR].toJSON()).to.equal("f0/acd7edc9c4c24a1351b80e68e6d830");
+  })
+
   it("writes nodes to files on flush", function() {
     this.store.write(this.node1);
+    let parentNode = {
+      keys: [],
+      children: [this.node1[PTR]],
+    };
+    this.store.write(parentNode);
     return this.store.flush().then(() => {
-      let nodePath = join(TEMP_DIR, this.ptr1);
-      expect(JSON.parse(readFileSync(nodePath))).to.deep.equal(this.node1);
+      expect(existsSync(join(TEMP_DIR, "f0/acd7edc9c4c24a1351b80e68e6d830"))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, this.ptr1))).to.be.true;
     });
   })
 
-  it("does not write nodes to file while initially cached", function() {
+  it("does not write deleted nodes to files on flush", function() {
     this.store.write(this.node1);
-    expect(readdirSync(join(TEMP_DIR))).to.deep.equal([]);
-  })
-
-  it("reads written node from file after flush", function() {
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
+    let parentNode = {
+      keys: [],
+      children: [this.node1[PTR]],
+    };
+    this.store.write(parentNode);
+    this.store.delete(parentNode[PTR]);
     return this.store.flush().then(() => {
-      return this.store.read(ptr1);
-    }).then(node => {
-      expect(node).to.deep.equal(this.node1);
-      expect(node[PTR]).to.equal(ptr1);
+      expect(existsSync(join(TEMP_DIR, this.ptr1))).to.be.true;
     });
   })
 
-  it("does not rewrite nodes to files in subsequent flushes", function() {
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-    return this.store.flush().then(() => {
-      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
-      return this.store.flush();
-    }).then(node => {
-      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
-    });
-  })
-
-  it("cannot read nodes after deleting", function() {
-    this.store.write(this.node1);
-    let ptr = this.node1[PTR];
-    this.store.delete(ptr);
-    return this.store.read(ptr).then(node => {
-      expect.fail("Did not throw");
-    }).catch(error => {
-      expect(error.code).to.equal("ENOENT");
-    });
-  })
-
-  it("reads compressed node from file after flush", function() {
-    this.store.config.compress = true;
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-    return this.store.flush().then(() => {
-      return this.store.read(ptr1);
-    }).then(node => {
-      expect(node).to.deep.equal(this.node1);
-      expect(node[PTR]).to.equal(ptr1);
-    });
-  })
-
-  it("reads and verifies compressed node from file after flush", function() {
-    this.store.config.verifyHash = true;
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-    return this.store.flush().then(() => {
-      return this.store.read(ptr1);
-    }).then(node => {
-      expect(node).to.deep.equal(this.node1);
-      expect(node[PTR]).to.equal(ptr1);
-    });
-  })
-
-  it("throws exception of failed verification", function() {
-    this.store.config.verifyHash = true;
-    this.store.config.fileMode = 0o666;  // So node files can be corrupted easily
-
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-    return this.store.sync().then(() => {
-      let path = join(TEMP_DIR, ptr1);
-
-      // Corrupt the node file
-      writeFileSync(path, "!");
-
-      return this.store.read(ptr1);
-    }).then(node => {
-      expect.fail("Did not throw");
-    }).catch(error => {
-      expect(error).to.match(/hash digest/);
-    });
-  })
-
-  it("nodes evicted from cache are written to file", function() {
+  it("nodes evicted from write cache are written to file", function() {
     this.store.config.cacheSize = 1;
-
     this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-
-    this.store.write(this.node2);
-    let ptr2 = this.node2[PTR];
-
-    expect(this.store.discrepancies.size).to.equal(1);
-    return this.store.flush().then(() => {
-      expect(this.store.discrepancies.size).to.equal(0);
-      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([this.ptr1.substring(3)]);
-    })
+    this.store.write(this.node2);  // evicts node1
+    let path = join(TEMP_DIR, this.ptr1);
+    return this.store.pathTasks.get(path).promise.then(() => {
+      expect(readdirSync(TEMP_DIR)).to.deep.equal([this.dir1]);
+      expect(existsSync(path)).to.be.true;
+    });
   })
 
-  it("nodes evicted from cache can be read again after they finish writing", function() {
+  it("nodes evicted from write cache and written to file can be deleted", function() {
     this.store.config.cacheSize = 1;
-
     this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
+    this.store.write(this.node2);  // evicts node1
+    let path = join(TEMP_DIR, this.ptr1);
+    return this.store.pathTasks.get(path).promise.then(() => {
+      expect(existsSync(path)).to.be.true;
+      
+      this.store.delete(this.node1[PTR]);
+      return this.store.pathTasks.get(path).promise.then(() => {
+        expect(existsSync(path)).to.be.false;
+      });
+    });
+  })
 
-    this.store.write(this.node2);
-    let ptr2 = this.node2[PTR];
-
-    expect(this.store.discrepancies.size).to.equal(1);
-    return this.store.flush().then(() => {
-      expect(this.store.discrepancies.size).to.equal(0);
-      return this.store.read(ptr1).then(node => {
+  it("nodes evicted from write cache and written to file can be read", function() {
+    this.store.config.cacheSize = 1;
+    this.store.write(this.node1);
+    this.store.write(this.node2);  // evicts node1
+    let path = join(TEMP_DIR, this.ptr1);
+    return this.store.pathTasks.get(path).promise.then(() => {
+      expect(existsSync(path)).to.be.true;
+      
+      return this.store.read(this.node1[PTR]).then(node => {
         expect(node).to.deep.equal(this.node1);
       });
-    })
-  })
-
-  it("nodes evicted from cache can be read while they are still being written", function() {
-    this.store.config.cacheSize = 1;
-
-    this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
-
-    this.store.write(this.node2);
-    let ptr2 = this.node2[PTR];
-
-    expect(this.store.discrepancies.size).to.equal(1);
-    return this.store.read(ptr1).then(node => {
-      expect(node).to.deep.equal(this.node1);
     });
   })
 
-  it("nodes evicted from cache can be deleted while they are still being written", function() {
+  it("can read nodes written by other store", function() {
+    this.store2.write(this.node1);
+    return this.store2.flush().then(() => {
+      return this.store.read(this.ptr1).then(node => {
+        expect(node[PTR]).to.equal(this.ptr1);
+        expect(node).to.deep.equal(this.node1);
+        expect(node).to.not.equal(this.node1);
+      });
+    });
+  })
+
+  it("cannot delete nodes written by other store", function() {
+    this.store2.write(this.node1);
+    return this.store2.flush().then(() => {
+      return this.store.delete(this.ptr1).then(() => {
+        expect.fail("Did not throw");
+      }).catch(error => {
+        expect(error).to.match(/delete/);
+      });
+    });
+  })
+
+  it("caches nodes read from file", function() {
+    this.store2.write(this.node1);
+    return this.store2.flush().then(() => {
+      return this.store.read(this.ptr1).then(node => {
+        expect(this.store.cache.get(this.ptr1)).to.deep.equal(node);
+        return this.store.read(this.ptr1).then(node2 => {
+          expect(node2).to.deep.equal(node);
+        });
+      });
+    });
+  })
+
+  it("evicts nodes from read cache", function() {
     this.store.config.cacheSize = 1;
+    this.store2.write(this.node1);
+    this.store2.write(this.node2);
+    return this.store2.flush().then(() => {
+      return this.store.read(this.ptr1).then(node1 => {
+        return this.store.read(this.ptr2).then(node2 => {  // evicts node1
+          expect(this.store.cache.get(this.ptr2)).to.deep.equal(node2);
+          expect(this.store.cache.has(this.ptr1)).to.be.false;
+        });
+      });
+    });
+  })
 
+  it("can read written compressed nodes", function() {
+    this.store.config.compress = true;
     this.store.write(this.node1);
-    let ptr1 = this.node1[PTR];
+    return this.store.read(this.node1[PTR]).then(node => {
+      expect(node).to.deep.equal(this.node1);
+      expect(node).to.not.equal(this.node1);
+    });
+  })
 
-    this.store.write(this.node2);
-    let ptr2 = this.node2[PTR];
-
-    this.store.delete(ptr1);
-
-    expect(this.store.discrepancies.size).to.equal(1);
+  it("verifies hash on read from file", function() {
+    this.store.config.verifyHash = true;
+    this.store.write(this.node1);
     return this.store.flush().then(() => {
-      expect(this.store.discrepancies.size).to.equal(0);
-      expect(readdirSync(join(TEMP_DIR, this.dir1))).to.deep.equal([]);
+      this.store.read(this.ptr1).then(node => {
+        expect(node).to.deep.equal(this.node1);
+      });
+    });
+  })
+
+  it("throws exception if hash doesn't match file", function() {
+    this.store.config.verifyHash = true;
+    this.store.config.fileMode = 0o666;  // So node files can be corrupted easily
+    this.store.write(this.node1);
+    return this.store.flush().then(() => {
+      // Corrupt the node file
+      writeFileSync(join(TEMP_DIR, String(this.ptr1)), "!");
+
+      return this.store.read(this.ptr1).then(() => {
+        expect.fail("Did not throw");
+      }).catch(error => {
+        expect(error).to.match(/hash/);
+      });
     });
   })
 
