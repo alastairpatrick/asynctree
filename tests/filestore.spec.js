@@ -52,7 +52,7 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     return this.store.read(this.node1[PTR]).then(node => {
       expect(node).to.deep.equal(this.node1);
-      expect(node).to.not.equal(this.node1);
+      expect(node).to.equal(this.node1);
     });
   })
 
@@ -195,7 +195,7 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     return this.store.read(this.node1[PTR]).then(node => {
       expect(node).to.deep.equal(this.node1);
-      expect(node).to.not.equal(this.node1);
+      expect(node).to.equal(this.node1);
     });
   })
 

@@ -23,6 +23,7 @@
     "sinon": "^2.3.4"
   },
   "dependencies": {
+    "lodash": "^4.17.4",
     "stable": "^0.1.6"
   }
 }

@@ -5,7 +5,7 @@ const { dirname, join } = require("path");
 const zlib = require("zlib");
 
 const { promisify } = require("./promisify");
-const { cloneNode, PTR } = require("./tree");
+const { PTR } = require("./tree");
 
 const MUST_WRITE = Symbol("MUST_WRITE");
 
@@ -90,7 +90,7 @@ class FileStore {
   read(ptr) {
     if (typeof ptr !== "string") {
       if (ptr.node !== undefined) {
-        return Promise.resolve(cloneNode(ptr.node));
+        return Promise.resolve(ptr.node);
       } else {
         if (ptr.hash === undefined)
           return Promise.reject(new Error("Pointer was deleted"));
@@ -101,7 +101,7 @@ class FileStore {
     
     let node = this.cache.get(ptr);
     if (node !== undefined)
-      return Promise.resolve(cloneNode(node));
+      return Promise.resolve(node);
 
     let path = this.ptrPath_(ptr);
     return this.schedulePathTask_(path, () => {

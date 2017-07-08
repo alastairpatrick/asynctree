@@ -1,8 +1,9 @@
 "use strict";
 
 const stable = require("stable");
+const cloneDeep = require("lodash/cloneDeep");
 
-const { PTR } = require("./base");
+const { PTR, cloneNode } = require("./base");
 const { TransactionStore } = require("./transactionstore");
 
 const has = Array.prototype.hasOwnProperty;
@@ -20,18 +21,6 @@ const nodeSize = (node) => {
     return node.children.length;
   else
     return node.keys.length;
-}
-
-const cloneNode = (node) => {
-  let clone = {
-    keys: node.keys.slice(),
-    [PTR]: node[PTR],
-  }
-  if (node.values)
-    clone.values = node.values.slice();
-  if (node.children)
-    clone.children = node.children.slice();
-  return clone;
 }
 
 /**
@@ -73,6 +62,7 @@ class Tree {
   constructor(store, rootPtr, config) {
     this.store = store;
     this.config = Object.assign({
+      cloneKeyValues: true,
       order: 1024,
     }, config);
     this.rootPtr = rootPtr;
@@ -146,7 +136,7 @@ class Tree {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
     this.rootPtr = undefined;
-    return this.setSubTree_(key, value, dummyRoot, type, this.tx).then(({ node }) => {
+    return this.setSubTree_(key, value, dummyRoot, type).then(({ node }) => {
       if (dummyRoot.children.length === 1) {
         this.rootPtr = dummyRoot.children[0];
       } else {
@@ -161,7 +151,8 @@ class Tree {
 
     if (node.children) {
       return this.tx.read(node.children[idx]).then(child => {
-        return this.setSubTree_(key, value, child, type, this.tx);
+        child = cloneNode(child);
+        return this.setSubTree_(key, value, child, type);
       }).then(({ node: child, idx: childIdx }) => {
         let sibling, newKey;
         if (child.keys.length >= this.config.order * 2) {
@@ -227,7 +218,8 @@ class Tree {
     let rootPtr = this.rootPtr;
     this.rootPtr = undefined;
     return this.tx.read(rootPtr).then(node => {
-      return this.deleteSubTree_(key, node, this.tx);
+      node = cloneNode(node);
+      return this.deleteSubTree_(key, node);
     }).then(({ node, idx }) => {
       if (node.children && node.children.length === 1) {
         this.rootPtr = node.children[0];
@@ -243,11 +235,14 @@ class Tree {
 
     if (node.children) {
       return this.tx.read(node.children[idx]).then(child => {
+        child = cloneNode(child);
         return this.deleteSubTree_(key, child);
       }).then(({ node: child, idx: childIdx }) => {
         if (nodeSize(child) < this.config.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
           return this.tx.read(node.children[siblingIdx]).then(sibling => {
+            sibling = cloneNode(sibling);
+
             let child1, child2, push, pop, minIdx;
             if (siblingIdx < idx) {
               minIdx = siblingIdx;
@@ -265,7 +260,6 @@ class Tree {
 
             if (nodeSize(sibling) > this.config.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
-
               if (child.children) {
                 push.call(child.keys, node.keys[minIdx]);
                 node.keys[minIdx] = pop.call(sibling.keys);
@@ -414,7 +408,12 @@ class Tree {
         let key = node.keys[i];
         if (this.cmp(key, upper) > 0)
           break;
-        if (cb.call(context, node.values[i], key) === Tree.BREAK)
+        let value = node.values[i];
+        if (this.config.cloneKeyValues) {
+          key = cloneDeep(key);
+          value = cloneDeep(value);
+        }
+        if (cb.call(context, value, key) === Tree.BREAK)
           return Tree.BREAK;
       }
     }
@@ -493,5 +492,4 @@ Tree.BREAK = Symbol("BREAK");
 module.exports = {
   Tree,
   PTR,
-  cloneNode,
 };

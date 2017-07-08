@@ -28,6 +28,7 @@ describe("TreeIndex", function() {
       index: "config",
       tree: "config",
       order: 1024,
+      cloneKeyValues: true,
     });
     return this.store.read(tree.rootPtr).then(root => {
       expect(root).to.deep.equal({
@@ -44,11 +45,12 @@ describe("TreeIndex", function() {
     return tree.insert(1, 10).then(() => {
       return this.treeIndex.commit({ mytree: tree });
     }).then(() => {
-      let tree2 = this.treeIndex.open("mytree").then(tree2 => {
+      return this.treeIndex.open("mytree").then(tree2 => {
         expect(tree2.config).to.deep.equal({
           index: "config",
           tree: "config",
           order: 1024,
+          cloneKeyValues: true,
         });
         return tree2.get(1);
       }).then(value => {
