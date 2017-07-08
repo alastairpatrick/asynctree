@@ -62,13 +62,18 @@ class Tree {
   constructor(store, rootPtr, config) {
     this.store = store;
     this.config = Object.assign({
-      cloneKeyValues: true,
       order: 1024,
     }, config);
     this.rootPtr = rootPtr;
     this.tx = new TransactionStore(this.store, this.rootPtr);
   }
 
+  /**
+   * Compare a pair of keys
+   * @param {*} a 
+   * @param {*} b 
+   * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
+   */
   cmp(a, b) {
     if (a < b)
       return -1;
@@ -76,6 +81,28 @@ class Tree {
       return 1;
     else
       return 0;
+  }
+
+  /**
+   * Keys are only cloned for safety reasons, i.e. to prevent keys held internally by the tree from being
+   * accidentally corrupted. One reason to override this method is to disable cloning in order to improve
+   * performance.
+   * @param {*} key Key to clone.
+   * @returns {*} The cloned key.
+   */
+  cloneKey(key) {
+    return cloneDeep(key);
+  }
+
+  /**
+   * Values are only cloned for safety reasons, i.e. to prevent values held internally by the tree from being
+   * accidentally modified. One reason to override this method is to disable cloning in order to improve
+   * performance.
+   * @param {*} key Value to clone.
+   * @returns {*} The cloned value.
+   */
+  cloneValue(value) {
+    return cloneDeep(value);
   }
 
   atomically(fn, context) {
@@ -129,6 +156,8 @@ class Tree {
   }
 
   set_(key, value, type) {
+    key = this.cloneKey(key);
+    value = this.cloneValue(value);
     let dummyRoot = {
       keys: [],
       children: [this.rootPtr],
@@ -409,11 +438,7 @@ class Tree {
         if (this.cmp(key, upper) > 0)
           break;
         let value = node.values[i];
-        if (this.config.cloneKeyValues) {
-          key = cloneDeep(key);
-          value = cloneDeep(value);
-        }
-        if (cb.call(context, value, key) === Tree.BREAK)
+        if (cb.call(context, this.cloneValue(value), this.cloneKey(key)) === Tree.BREAK)
           return Tree.BREAK;
       }
     }

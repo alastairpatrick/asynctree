@@ -28,7 +28,6 @@ describe("TreeIndex", function() {
       index: "config",
       tree: "config",
       order: 1024,
-      cloneKeyValues: true,
     });
     return this.store.read(tree.rootPtr).then(root => {
       expect(root).to.deep.equal({
@@ -50,7 +49,6 @@ describe("TreeIndex", function() {
           index: "config",
           tree: "config",
           order: 1024,
-          cloneKeyValues: true,
         });
         return tree2.get(1);
       }).then(value => {
