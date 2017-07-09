@@ -68,58 +68,117 @@ class Tree {
   }
 
   /**
-   * Compare a pair of keys. When keys are of differing types, the order is
-   * boolean < number < null < array < string. Objects may only be compared
-   * if they are arrays.
-   * @param {*} a 
-   * @param {*} b 
+   * Compare a pair of keys. When keys are of different types, the order is
+   * boolean < number < string < array < object < null.
+   * @param {*} a A key to compare.
+   * @param {*} b Another key to compare.
    * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
    */
   cmp(a, b) {
-    let ta = typeof a;
-    let tb = typeof b;
+    const TYPEOF_ORDER = {
+      "boolean": 0,
+      "number": 1,
+      "string": 2,
+      "object": 3,
+    };
+    let ta = TYPEOF_ORDER[typeof a];
+    let tb = TYPEOF_ORDER[typeof b];
     if (ta < tb)
       return -1;
     else if (ta > tb)
       return 1;
+    else if (ta === 2)
+      return this.cmpString(a, b);
+    else if (ta === 3)
+      return this.cmpObject(a, b);
     else {
-      if (ta === "object") {
-        let aa = Array.isArray(a);
-        let ab = Array.isArray(b);
-        if (aa < ab)
-          return -1;
-        else if (aa > ab)
-          return 1;
-        else {
-          if (aa) {
-            let len = Math.min(a.length, b.length);
-            for (let i = 0; i < len; ++i) {
-              let c = this.cmp(a[i], b[i]);
-              if (c !== 0)
-                return c;
-            }
-            if (a.length < b.length)
-              return -1;
-            else if (a.length > b.length)
-              return 1;
-            else
-              return 0;
-          } else {
-            if (a === null && b === null)
-              return 0;
-            else
-              throw new Error(`Cannot compare objects ${a} and ${b}.`);
-          }
+      if (a < b)
+        return -1;
+      else if (a > b)
+        return 1;
+      else
+        return 0;
+    }
+  }
+
+  /**
+   * Compare two objects, including arrays and null.
+   * @param {Object} a An object to compare.
+   * @param {Object} b Another object to compare.
+   * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
+   */
+  cmpObject(a, b) {
+    let aa = Array.isArray(a);
+    let ab = Array.isArray(b);
+    if (aa < ab)
+      return 1;
+    else if (aa > ab)
+      return -1;
+    else {
+      if (aa) {
+        let len = Math.min(a.length, b.length);
+        for (let i = 0; i < len; ++i) {
+          let c = this.cmp(a[i], b[i]);
+          if (c !== 0)
+            return c;
         }
-      } else {
-        if (a < b)
+        if (a.length < b.length)
           return -1;
-        else if (a > b)
+        else if (a.length > b.length)
           return 1;
         else
           return 0;
+      } else {
+        if (a === null && b === null)
+          return 0;
+        else if (a === null)
+          return 1;
+        else if (b === null)
+          return -1;
+        else {
+          let ak = Object.keys(a);
+          let bk = Object.keys(b);
+          if (ak.length < bk.length)
+            return -1;
+          else if (ak.length > bk.length)
+            return 1;
+          else {
+            ak.sort();
+            bk.sort();
+            let len = ak.length;  // === bk.length
+            for (let i = 0; i < len; ++i) {
+              let ka = ak[i];
+              let kb = bk[i];
+              if (ka < kb)
+                return -1;
+              else if (ka > kb)
+                return 1;
+              else {
+                let c = this.cmp(a[ka], b[kb]);
+                if (c !== 0)
+                  return c;
+              }
+            }
+            return 0;
+          }
+        }
       }
     }
+  }
+
+  /**
+   * Compare two strings. This method can be overridden to provide for other string collations.
+   * @param {string} a A string to compare.
+   * @param {string} b Another string to compare.
+   * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
+   */
+  cmpString(a, b) {
+    if (a < b)
+      return -1;
+    else if (a > b)
+      return 1;
+    else
+      return 0;
   }
 
   /**
