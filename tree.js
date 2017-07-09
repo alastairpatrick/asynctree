@@ -48,9 +48,8 @@ const nodeSize = (node) => {
  * It could be a number or string, such as a filename or URL. It is up to the backing store to interpret 
  * pointers; trees view them as opaque.
  * 
- * Keys and values are also considered opaque, except with regard to key comparison. A comparison function
- * determines key ordering. The default comparison uses JavaScript's < and > operators and is effective for
- * e.g. strings or numbers.
+ * Keys and values are also considered opaque, except with regard to key comparison. The cmp method
+ * determines key ordering and can be overriden.
  */
 class Tree {
   /**
@@ -69,18 +68,58 @@ class Tree {
   }
 
   /**
-   * Compare a pair of keys
+   * Compare a pair of keys. When keys are of differing types, the order is
+   * boolean < number < null < array < string. Objects may only be compared
+   * if they are arrays.
    * @param {*} a 
    * @param {*} b 
    * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
    */
   cmp(a, b) {
-    if (a < b)
+    let ta = typeof a;
+    let tb = typeof b;
+    if (ta < tb)
       return -1;
-    else if (a > b)
+    else if (ta > tb)
       return 1;
-    else
-      return 0;
+    else {
+      if (ta === "object") {
+        let aa = Array.isArray(a);
+        let ab = Array.isArray(b);
+        if (aa < ab)
+          return -1;
+        else if (aa > ab)
+          return 1;
+        else {
+          if (aa) {
+            let len = Math.min(a.length, b.length);
+            for (let i = 0; i < len; ++i) {
+              let c = this.cmp(a[i], b[i]);
+              if (c !== 0)
+                return c;
+            }
+            if (a.length < b.length)
+              return -1;
+            else if (a.length > b.length)
+              return 1;
+            else
+              return 0;
+          } else {
+            if (a === null && b === null)
+              return 0;
+            else
+              throw new Error(`Cannot compare objects ${a} and ${b}.`);
+          }
+        }
+      } else {
+        if (a < b)
+          return -1;
+        else if (a > b)
+          return 1;
+        else
+          return 0;
+      }
+    }
   }
 
   /**

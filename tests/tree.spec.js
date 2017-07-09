@@ -1203,3 +1203,86 @@ fileStoreFactory.after = (store) => {
     })
   })
 })
+
+// boolean < number < null < array < string
+describe("key order", function() {
+  beforeEach(function() {
+    this.cmp = Tree.prototype.cmp;
+  });
+
+  it("orders numbers", function() {
+    expect(this.cmp(1, 2)).to.equal(-1);
+    expect(this.cmp(1, 1)).to.equal(0);
+    expect(this.cmp(1, 0)).to.equal(1);
+  });
+
+  it("orders strings", function() {
+    expect(this.cmp("b", "ba")).to.equal(-1);
+    expect(this.cmp("b", "b")).to.equal(0);
+    expect(this.cmp("b", "a")).to.equal(1);
+  });
+
+  it("orders booleans", function() {
+    expect(this.cmp(false, true)).to.equal(-1);
+    expect(this.cmp(true, true)).to.equal(0);
+    expect(this.cmp(true, false)).to.equal(1);
+  });
+
+  it("orders nulls", function() {
+    expect(this.cmp(null, null)).to.equal(0);
+  });
+
+  it("orders arrays", function() {
+    expect(this.cmp([3], [2])).to.equal(1);
+    expect(this.cmp([2], [3])).to.equal(-1);
+    expect(this.cmp([2], [2])).to.equal(0);
+    expect(this.cmp([2, 0], [2])).to.equal(1);
+    expect(this.cmp([2], [2, 0])).to.equal(-1);
+  });
+
+  it("boolean before number", function() {
+    expect(this.cmp(true, -1000)).to.equal(-1);
+    expect(this.cmp(-1000, true)).to.equal(1);
+  });
+
+  it("number before object", function() {
+    expect(this.cmp(1000, null)).to.equal(-1);
+    expect(this.cmp(1000, [])).to.equal(-1);
+
+    expect(this.cmp(null, 1000)).to.equal(1);
+    expect(this.cmp([], 1000)).to.equal(1);
+  });
+
+  it("null before array", function() {
+    expect(this.cmp(null, [])).to.equal(-1);
+    expect(this.cmp([], null)).to.equal(1);
+  });
+
+  it("object before string", function() {
+    expect(this.cmp(null, "")).to.equal(-1);
+    expect(this.cmp([], "")).to.equal(-1);
+
+    expect(this.cmp("", null)).to.equal(1);
+    expect(this.cmp("", [])).to.equal(1);
+  });
+
+  it("array of boolean before array of number", function() {
+    expect(this.cmp([false], [1])).to.equal(-1);
+    expect(this.cmp([1], [false])).to.equal(1);
+  });
+
+  it("array of number before array of object", function() {
+    expect(this.cmp([1], [[]])).to.equal(-1);
+    expect(this.cmp([[]], [1])).to.equal(1);
+  });
+
+  it("array of object before array of string", function() {
+    expect(this.cmp([[]], ["a"])).to.equal(-1);
+    expect(this.cmp(["a"], [[]])).to.equal(1);
+  });
+
+  it("short array before longer array", function() {
+    expect(this.cmp([[]], [[], []])).to.equal(-1);
+    expect(this.cmp([[], []], [[]])).to.equal(1);
+  });
+});
