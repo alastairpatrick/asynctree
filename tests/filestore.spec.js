@@ -240,4 +240,10 @@ describe("FileStore", function() {
       expect(index).to.deep.equal({ rootPtr: this.ptr1 });      
     });
   });
+
+  it("readMeta returns undefined for non-existent name", function() {
+    return this.store.readMeta("gone").then(index => {
+      expect(index).to.be.undefined;
+    });
+  });
 })

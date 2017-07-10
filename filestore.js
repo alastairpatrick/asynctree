@@ -220,7 +220,10 @@ class FileStore {
 
   readMeta(path) {
     let indexPath = join(this.dir, path);
-    return readFile(indexPath, { encoding: "utf-8" }).then(JSON.parse);
+    return readFile(indexPath, { encoding: "utf-8" }).then(JSON.parse).catch(error => {
+      if (error.code !== "ENOENT")
+        throw error;
+    });
   }
 
   writeMeta(path, index) {
