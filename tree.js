@@ -181,28 +181,6 @@ class Tree {
       return 0;
   }
 
-  /**
-   * Keys are only cloned for safety reasons, i.e. to prevent keys held internally by the tree from being
-   * accidentally corrupted. One reason to override this method is to disable cloning in order to improve
-   * performance.
-   * @param {*} key Key to clone.
-   * @returns {*} The cloned key.
-   */
-  cloneKey(key) {
-    return cloneDeep(key);
-  }
-
-  /**
-   * Values are only cloned for safety reasons, i.e. to prevent values held internally by the tree from being
-   * accidentally modified. One reason to override this method is to disable cloning in order to improve
-   * performance.
-   * @param {*} key Value to clone.
-   * @returns {*} The cloned value.
-   */
-  cloneValue(value) {
-    return cloneDeep(value);
-  }
-
   atomically(fn, context) {
     let oldTx = this.tx;
     this.tx = new TransactionStore(oldTx, this.rootPtr);
@@ -254,8 +232,6 @@ class Tree {
   }
 
   set_(key, value, type) {
-    key = this.cloneKey(key);
-    value = this.cloneValue(value);
     let dummyRoot = {
       keys: [],
       children: [this.rootPtr],
@@ -536,7 +512,7 @@ class Tree {
         if (this.cmp(key, upper) > 0)
           break;
         let value = node.values[i];
-        if (cb.call(context, this.cloneValue(value), this.cloneKey(key)) === Tree.BREAK)
+        if (cb.call(context, value, key) === Tree.BREAK)
           return Tree.BREAK;
       }
     }
