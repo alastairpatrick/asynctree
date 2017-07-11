@@ -68,10 +68,12 @@ class TreeIndex {
 
     return this.trees.bulk(bulk).then(() => {
       this.trees.commit();
-      let index = {
-        rootPtr: this.trees.rootPtr,
-      };
-      return this.store.writeMeta(this.indexPath, index);
+      return this.store.flush().then(() => {
+        let index = {
+          rootPtr: this.trees.rootPtr,
+        };
+        return this.store.writeMeta(this.indexPath, index);
+      });
     });
   }
 }

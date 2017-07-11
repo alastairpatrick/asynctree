@@ -57,6 +57,18 @@ describe("TreeIndex", function() {
     });
   })
 
+  it("commit flushes store", function() {
+    sinon.spy(this.store, "flush");
+    let tree = this.treeIndex.empty({
+      tree: "config",
+    });
+    return tree.insert(1, 10).then(() => {
+      return this.treeIndex.commit({ mytree: tree });
+    }).then(() => {
+      sinon.assert.calledOnce(this.store.flush);
+    });
+  })
+
   it("exception on opening tree that does not exist", function() {
     return this.treeIndex.open("mytree").then(tree2 => {
       expect.fail("Did not throw");
