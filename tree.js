@@ -186,9 +186,10 @@ class Tree {
     this.tx = new TransactionStore(oldTx, this.rootPtr);
 
     try {
-      return Promise.resolve(fn.call(context)).then(() => {
+      return Promise.resolve(fn.call(context)).then(result => {
         this.tx.commit(this.rootPtr);
         this.tx = oldTx;
+        return result;
       }).catch(error => {
         this.rootPtr = this.tx.rollback();
         this.tx = oldTx;
@@ -239,13 +240,14 @@ class Tree {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
     this.rootPtr = undefined;
-    return this.setSubTree_(key, value, dummyRoot, type).then(({ node }) => {
+    return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue }) => {
       if (dummyRoot.children.length === 1) {
         this.rootPtr = dummyRoot.children[0];
       } else {
         this.tx.write(node);
         this.rootPtr = node[PTR];
       }
+      return oldValue;
     });
   }
 
@@ -256,7 +258,7 @@ class Tree {
       return this.tx.read(node.children[idx]).then(child => {
         child = cloneNode(child);
         return this.setSubTree_(key, value, child, type);
-      }).then(({ node: child, idx: childIdx }) => {
+      }).then(({ node: child, idx: childIdx, oldValue }) => {
         let sibling, newKey;
         if (child.keys.length >= this.config.order * 2) {
           if (child.children) {
@@ -289,20 +291,22 @@ class Tree {
         this.tx.write(child);
         replaceChild(node.children, idx, child[PTR], this.tx);
 
-        return { node, idx };
+        return { node, idx, oldValue };
       });
     } else {
+      let oldValue;
       if (equal)  {
         if (type === "insert")
           throw new Error(`Key '${key}' already in tree.`);
+        oldValue = node.values[idx];
         node.values[idx] = value;
       } else {
         if (type === "update")
-          throw new Error(`Key '${key}' not found.`);        
+          throw new Error(`Key '${key}' not found.`);
         node.keys.splice(idx, 0, key);
         node.values.splice(idx, 0, value);
       }
-      return Promise.resolve({ node, idx });
+      return Promise.resolve({ node, idx, oldValue });
     }
   }
 
@@ -323,13 +327,18 @@ class Tree {
     return this.tx.read(rootPtr).then(node => {
       node = cloneNode(node);
       return this.deleteSubTree_(key, node);
-    }).then(({ node, idx }) => {
-      if (node.children && node.children.length === 1) {
-        this.rootPtr = node.children[0];
+    }).then(({ node, idx, oldValue }) => {
+      if (oldValue === undefined) {
+        this.rootPtr = rootPtr;
       } else {
-        this.tx.write(node);
-        this.rootPtr = node[PTR];
+        if (node.children && node.children.length === 1) {
+          this.rootPtr = node.children[0];
+        } else {
+          this.tx.write(node);
+          this.rootPtr = node[PTR];
+        }
       }
+      return oldValue;
     });
   }
 
@@ -340,7 +349,10 @@ class Tree {
       return this.tx.read(node.children[idx]).then(child => {
         child = cloneNode(child);
         return this.deleteSubTree_(key, child);
-      }).then(({ node: child, idx: childIdx }) => {
+      }).then(({ node: child, idx: childIdx, oldValue }) => {
+        if (oldValue === undefined)
+          return {};
+
         if (nodeSize(child) < this.config.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
           return this.tx.read(node.children[siblingIdx]).then(sibling => {
@@ -397,21 +409,22 @@ class Tree {
 
             this.tx.write(child);
             replaceChild(node.children, idx, child[PTR], this.tx);
-            return { node, idx };
+            return { node, idx, oldValue };
           });
         }
         
         this.tx.write(child);
         replaceChild(node.children, idx, child[PTR], this.tx);
-        return { node, idx };
+        return { node, idx, oldValue };
       });
     } else {
       if (equal) {
+        let oldValue = node.values[idx];
         node.keys.splice(idx, 1);
         node.values.splice(idx, 1);
-        return Promise.resolve({ node, idx });
+        return Promise.resolve({ node, idx, oldValue });
       } else {
-        return Promise.reject(new Error(`Key '${key}' not found.`));
+        return Promise.resolve({});
       }
     }
   }

@@ -139,7 +139,8 @@ fileStoreFactory.after = (store) => {
     describe("set", function() {
       it("after creation", function() {
         let tree = new Tree(this.store, this.emptyNodePtr);
-        return tree.insert(1, 10).then(() => {
+        return tree.insert(1, 10).then(value => {
+          expect(value).to.equal(undefined);
           return serializeTree(this.store, tree.rootPtr);
         }).then(tree => {
           expect(tree).to.deep.equal({
@@ -169,7 +170,8 @@ fileStoreFactory.after = (store) => {
         let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 30).then(() => {
           return tree.update(1, 10);
-        }).then(() => {
+        }).then(value => {
+          expect(value).to.equal(30);
           return tree.insert(2, 20);
         }).then(() => {
           return serializeTree(this.store, tree.rootPtr);
@@ -444,7 +446,8 @@ fileStoreFactory.after = (store) => {
         let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
           return tree.delete(1);
-        }).then(() => {
+        }).then(value => {
+          expect(value).to.equal(10);
           return serializeTree(this.store, tree.rootPtr);
         }).then(tree => {
           expect(tree).to.deep.equal({
@@ -454,14 +457,11 @@ fileStoreFactory.after = (store) => {
         });
       })
       
-      it("throws exception if does not exist", function() {
+      it("undefined result if does not exist", function() {
         let tree = new Tree(this.store, this.emptyNodePtr);
         return tree.insert(1, 10).then(() => {
-          return tree.delete(2).then(() => {
-            expect.fail("Did not throw");
-          }).catch(error => {
-            expect(error).to.match(/'2'/);
-
+          return tree.delete(2).then(value => {
+            expect(value).to.be.undefined;
             return tree.get(1).then(value => {
               expect(value).to.equal(10);
             });
@@ -496,7 +496,8 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr, { order: 2 });
-          return tree.delete(13).then(() => {
+          return tree.delete(13).then(value => {
+            expect(value).to.equal(13);
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
@@ -555,7 +556,8 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr, { order: 2 });
-          return tree.delete(15).then(() => {
+          return tree.delete(15).then(value => {
+            expect(value).to.equal(15);
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
@@ -609,7 +611,8 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr, { order: 2 });
-          return tree.delete(1).then(() => {
+          return tree.delete(1).then(value => {
+            expect(value).to.equal(1);
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
@@ -644,7 +647,8 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr, { order: 2 });
-          return tree.delete(20).then(() => {
+          return tree.delete(20).then(value => {
+            expect(value).to.equal(20);
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
@@ -691,7 +695,8 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr, { order: 2 });
-          return tree.delete(4).then(() => {
+          return tree.delete(4).then(value => {
+            expect(value).to.equal(4);
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
