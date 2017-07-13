@@ -70,15 +70,19 @@ class Ptr {
 
 class FileStore {
   constructor(dir, config) {
-    this.dir = dir;
-    this.config = Object.assign({
+    config = Object.assign({
       cacheSize: 256,
       compress: true,
-      fileMode: 0o444,
+      fileMode: 0o644,
       maxConcurrentIO: 4,
       verifyHash: false,
     }, config);
 
+    if ((config.fileMode & 0o600) !== 0o600)
+      throw new Error("File mode must allow read and write access to user.");
+
+    this.dir = dir;
+    this.config = config;
     this.pathTasks = new Map();
     this.writes = new Set();
     this.cache = new Map();
@@ -293,19 +297,14 @@ class FileStore {
   writeFileAtomic_(path, data, options) {
     options = Object.assign({}, options, { flags: "wx" });
 
-    let tempPath = join(tempDir, tempCount.toString(36) + "." + Math.random().toString(36).substring(2));
+    let tempPath = join(tempDir, tempCount.toString(36));
     ++tempCount;
     return writeFile(tempPath, data, options).then(() => {
       return rename(tempPath, path).catch(error => {
         return unlink(tempPath).catch(() => {
-          if (error.code !== "EPERM")
-            throw error;
+          throw error;
         }).then(() => {
-          // Windows doesn't allow one file to be renamed over another; instead its an error. Can ignore the
-          // error because the target file had the same hash and therefore content as the file intended as its
-          // replacement.
-          if (error.code !== "EPERM")
-            throw error;
+          throw error;
         });
       });
     });

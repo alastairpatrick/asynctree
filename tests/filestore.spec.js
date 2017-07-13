@@ -246,4 +246,10 @@ describe("FileStore", function() {
       expect(index).to.be.undefined;
     });
   });
+
+  it("exception if file mode does not allow read and write access to user", function() {
+    expect(() => {
+      new FileStore(TEMP_DIR, { fileMode: 0o444 });
+    }).to.throw(/access/);
+  });
 })
