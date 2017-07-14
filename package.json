@@ -4,7 +4,7 @@
   "description": "Asynchronous, immutable, persistent multi-way search tree",
   "main": "index.js",
   "scripts": {
-    "test": "mocha tests/**/*.spec.js"
+    "test": "mocha **/*.spec.js"
   },
   "keywords": [
     "b+-tree",
@@ -19,8 +19,10 @@
   "devDependencies": {
     "chai": "^4.0.2",
     "mocha": "^3.4.2",
+    "pg": "^6.4.1",
     "shelljs": "^0.7.8",
-    "sinon": "^2.3.4"
+    "sinon": "^2.3.4",
+    "xregexp": "^3.2.0"
   },
   "dependencies": {
     "lodash": "^4.17.4",
