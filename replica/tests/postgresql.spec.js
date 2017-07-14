@@ -1,10 +1,10 @@
 "use strict";
 
 const { expect } = require("chai");
-const pg = require("pg");
+const { Client } = require("pg");
 const sinon = require("sinon");
 
-const { Client } = require("../postgresql");
+const { Publisher } = require("../postgresql");
 
 const has = Object.prototype.hasOwnProperty;
 
@@ -22,21 +22,21 @@ const readAll = (cursor) => {
 }
 
 // Need to have a database configured to run these tests so they are disabled.
-xdescribe("Client", function() {
+xdescribe("Publisher", function() {
   beforeEach(function() {
-    this.pgClient = new pg.Client({
+    this.client = new Client({
       connectionString: "postgres://postgres@localhost:5432/zeta",
     });
-    this.pgClient.connect();
-    this.client = new Client(this.pgClient);
+    this.client.connect();
+    this.publisher = new Publisher(this.client);
   })
 
   afterEach(function() {
-    return this.client.end();
+    return this.publisher.end();
   });
 
   it("queries rows in table", function() {
-    let cursor = this.client.query({
+    let cursor = this.publisher.query({
       "schema": "pg_catalog",
       "name": "pg_class",
     }, ["oid"]);
@@ -47,8 +47,8 @@ xdescribe("Client", function() {
   });
 
   it("query rows of table in snapshot transaction", function() {
-    return this.client.snapshot(() => {
-      let cursor = this.client.query({
+    return this.publisher.snapshot(() => {
+      let cursor = this.publisher.query({
         "schema": "pg_catalog",
         "name": "pg_class",
       }, ["oid"]);

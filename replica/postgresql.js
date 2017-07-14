@@ -200,7 +200,7 @@ const parseRecvLine = (line) => {
   }
 }
 
-class Client {
+class Publisher {
   constructor(client, slotName = "replica") {
     this.client = client;
     this.slotName = slotName;
@@ -321,7 +321,7 @@ class Client {
 }
 
 module.exports = {
-  Client,
+  Publisher,
   parseRecvLine,
   parseRecvLines,
 }

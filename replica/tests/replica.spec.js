@@ -32,7 +32,7 @@ class TestCursor {
   }
 }
 
-class TestClient {
+class TestPublisher {
   constructor(tables) {
     this.tables = tables;
     this.events = [];
@@ -100,12 +100,12 @@ describe("Replica", function() {
 
     this.store = new TestStore();
     this.tree = Tree.empty(this.store);
-    this.client = new TestClient(this.tables);
-    this.replica = new Replica(this.tree, this.client, this.config);
+    this.publisher = new TestPublisher(this.tables);
+    this.replica = new Replica(this.tree, this.config);
   });
 
   it("loads existing rows of each index", function() {
-    return this.replica.snapshot().then(() => {
+    return this.replica.snapshot(this.publisher).then(() => {
       let result = [];
       return this.tree.forEach((value, key) => {
         result.push([key, value]);
@@ -162,21 +162,21 @@ describe("Replica", function() {
   });
 
   it("streams no events", function() {
-    return this.replica.replicate();
+    return this.replica.replicate(this.publisher);
   })
 
   it("streams row update", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "UPDATE",
       schema: "public",
       name: "employee",
       row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");
@@ -184,17 +184,17 @@ describe("Replica", function() {
   })
 
   it("streams row update, ignoring extra column", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "UPDATE",
       schema: "public",
       name: "employee",
       row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber", extra: "ignored" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");
@@ -202,17 +202,17 @@ describe("Replica", function() {
   })
 
   it("streams row insert", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "INSERT",
       schema: "public",
       name: "employee",
       row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([0, 0, 4]);
     }).then(value => {
       expect(value).to.deep.equal({ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" });
@@ -220,17 +220,17 @@ describe("Replica", function() {
   })
 
   it("streams row insert, ignoring extra column", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "INSERT",
       schema: "public",
       name: "employee",
       row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist", extra: "ignored" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([0, 0, 4]);
     }).then(value => {
       expect(value).to.deep.equal({ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" });
@@ -238,17 +238,17 @@ describe("Replica", function() {
   })
 
   it("streams row delete", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "DELETE",
       schema: "public",
       name: "employee",
       row: { id: 3 },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([0, 0, 3]);
     }).then(value => {
       expect(value).to.be.undefined;
@@ -257,14 +257,14 @@ describe("Replica", function() {
 
   it("automatically does bulk operation after buffering enough rows", function() {
     for (let i = 0; i < this.config.bulkSize * 2 - 2; ++i) {
-      this.client.events.push({
+      this.publisher.events.push({
         type: "UPDATE",
         schema: "public",
         name: "project",
         row: { id: 2, name: i },
       });
     }
-    return this.replica.replicate().then(() => {
+    return this.replica.replicate(this.publisher).then(() => {
       return this.tree.get([1, 0, 2]);
     }).then(value => {
       expect(value.name).to.equal(this.config.bulkSize - 1);
@@ -272,41 +272,41 @@ describe("Replica", function() {
   })
 
   it("ignores unknown event type", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "IGNORED",
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate();
+    return this.replica.replicate(this.publisher);
   })
 
   it("ignores unknown schema", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "INSERT",
       schema: "unknown",
       name: "employee",
       row: { foo: "bar" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate();
+    return this.replica.replicate(this.publisher);
   })
 
   it("ignores unknown table", function() {
-    this.client.events.push({
+    this.publisher.events.push({
       type: "INSERT",
       schema: "public",
       name: "unknown",
       row: { foo: "bar" },
     });
-    this.client.events.push({
+    this.publisher.events.push({
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate();
+    return this.replica.replicate(this.publisher);
   })
 })
