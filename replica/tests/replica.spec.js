@@ -64,6 +64,12 @@ describe("Replica", function() {
       tables: [{
         schema: "public",
         name: "employee",
+        columns: {
+          id: {},
+          first_name: {},
+          last_name: {},
+          occupation: {},
+        },
         indices: [{
           keyPath: ["id"],
         }, {
@@ -177,12 +183,48 @@ describe("Replica", function() {
     });
   })
 
+  it("streams row update, ignoring extra column", function() {
+    this.client.events.push({
+      type: "UPDATE",
+      schema: "public",
+      name: "employee",
+      row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber", extra: "ignored" },
+    });
+    this.client.events.push({
+      type: "COMMIT",
+      tx: "1",
+    });
+    return this.replica.replicate().then(() => {
+      return this.tree.get([0, 0, 2]);
+    }).then(value => {
+      expect(value.occupation).to.equal("Plumber");
+    });
+  })
+
   it("streams row insert", function() {
     this.client.events.push({
       type: "INSERT",
       schema: "public",
       name: "employee",
       row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" },
+    });
+    this.client.events.push({
+      type: "COMMIT",
+      tx: "1",
+    });
+    return this.replica.replicate().then(() => {
+      return this.tree.get([0, 0, 4]);
+    }).then(value => {
+      expect(value).to.deep.equal({ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" });
+    });
+  })
+
+  it("streams row insert, ignoring extra column", function() {
+    this.client.events.push({
+      type: "INSERT",
+      schema: "public",
+      name: "employee",
+      row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist", extra: "ignored" },
     });
     this.client.events.push({
       type: "COMMIT",
@@ -219,13 +261,13 @@ describe("Replica", function() {
         type: "UPDATE",
         schema: "public",
         name: "project",
-        row: { id: 2, count: i },
+        row: { id: 2, name: i },
       });
     }
     return this.replica.replicate().then(() => {
       return this.tree.get([1, 0, 2]);
     }).then(value => {
-      expect(value.count).to.equal(this.config.bulkSize - 1);
+      expect(value.name).to.equal(this.config.bulkSize - 1);
     });
   })
 

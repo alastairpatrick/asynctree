@@ -118,7 +118,18 @@ class Replica {
 
           let keyPrefix = [tableIdx, indexIdx];
           let key = keyPrefix.concat(keyPath.map(c => event.row[c]));
-          let value = event.row;
+
+          let value;
+          if (table.columns === undefined) {
+            value = event.row;
+          } else {
+            value = {};
+            for (let cn in table.columns) {
+              if (has.call(table.columns, cn)) {
+                value[cn] = event.row[cn];
+              }
+            }
+          }
 
           if (event.type === "DELETE") {
             bulkRows.push([key]);
