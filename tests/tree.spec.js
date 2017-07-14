@@ -54,6 +54,7 @@ testStoreFactory.after = (store) => {
 }
 
 const fileStoreFactory = () => {
+  sh.mkdir("-p", TEMP_DIR);
   return new FileStore(TEMP_DIR);
 }
 

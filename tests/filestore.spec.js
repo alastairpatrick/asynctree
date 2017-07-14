@@ -29,6 +29,8 @@ describe("FileStore", function() {
     this.ptr2 = "de/6cdc8f57b0b7af87574f6ff128a297";
     this.dir2 = "de";
 
+
+    sh.mkdir("-p", TEMP_DIR);
     sh.rm("-rf", join(TEMP_DIR, "*"));
 
     this.store = new FileStore(TEMP_DIR, {
