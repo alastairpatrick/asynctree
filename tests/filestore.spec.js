@@ -243,8 +243,9 @@ describe("FileStore", function() {
 
   it("readMeta returns undefined for non-existent name", function() {
     return this.store.readMeta("gone").then(index => {
-      expect(index).to.be.undefined;
-    });
+      expect.fail("Did not throw");
+    }).catch(error => {
+    });;
   });
 
   it("exception if file mode does not allow read and write access to user", function() {

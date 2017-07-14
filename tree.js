@@ -67,6 +67,21 @@ class Tree {
     this.tx = new TransactionStore(this.store, this.rootPtr);
   }
 
+  static empty(store, config={}, TreeClass=Tree) {
+    let root = {
+      keys: [],
+      values: [],
+    };
+    store.write(root);
+    return new TreeClass(store, root[PTR], config);
+  }
+
+  static open(store, name, TreeClass=Tree) {
+    return store.readMeta(name).then(meta => {
+      return new TreeClass(store, meta.rootPtr, meta.config);
+    });
+  }
+
   /**
    * Compare a pair of keys. When keys are of different types, the order is
    * boolean < number < string < array < object < null.
@@ -590,8 +605,18 @@ class Tree {
     return processChildren(node, 0);
   }
 
-  commit() {
+  commit(name) {
     this.tx.commit(this.rootPtr);
+
+    if (name === undefined)
+      return this.store.flush();
+
+    return this.store.writeMeta(name, {
+      rootPtr: this.rootPtr,
+      config: this.config,
+    }).then(() => {
+      return this.store.flush();
+    });
   }
 
   rollback() {

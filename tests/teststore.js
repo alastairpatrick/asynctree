@@ -34,6 +34,8 @@ class TestStore {
   }
 
   readMeta(path) {
+    if (this.index === undefined)
+      return Promise.reject(new Error("Not found"));
     return Promise.resolve(this.index);
   }
 

@@ -125,16 +125,43 @@ fileStoreFactory.after = (store) => {
     })
 
 
-    it("has no entries on creation", function() {
-      let tree = new Tree(this.store, this.emptyNodePtr);
-      return serializeTree(this.store, tree.rootPtr).then(tree => {
-        expect(tree).to.deep.equal({
-          keys: [],
-          values: [],
+    describe("lifetime", function() {
+      it("has no entries on creation", function() {
+        let tree = Tree.empty(this.store);
+        return serializeTree(this.store, tree.rootPtr).then(tree => {
+          expect(tree).to.deep.equal({
+            keys: [],
+            values: [],
+          });
         });
-      });
-    })
+      })
 
+      it("opens existing tree", function() {
+        let tree = Tree.empty(this.store, {
+          tree: "config",
+        });
+        return tree.insert(1, 10).then(() => {
+          return tree.commit("mytree");
+        }).then(() => {
+          return Tree.open(this.store, "mytree").then(tree2 => {
+            expect(tree2.config).to.deep.equal({
+              tree: "config",
+              order: 1024,
+            });
+            return tree2.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+          });
+        });
+      })
+
+      it("exception on opening tree that does not exist", function() {
+        return Tree.open(this.store, "mytree").then(tree2 => {
+          expect.fail("Did not throw");
+        }).catch(error => {
+        });
+      })    
+    })
 
     describe("set", function() {
       it("after creation", function() {
@@ -1104,18 +1131,29 @@ fileStoreFactory.after = (store) => {
         });
       })
 
-      it("can commit tree", function() {
+      it("can commit tree and write meta", function() {
         return deserializeTree(this.store, {
           keys: [],
           values: [],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr);
           return tree.insert(1, 10).then(() => {
-            return tree.commit();
+            return tree.commit("commit");
           }).then(() => {
             return tree.get(1);
           }).then(value => {
             expect(value).to.equal(10);
+            return this.store.readMeta("commit");
+          }).then(meta => {
+            let rootPtr = tree.rootPtr;
+            if (typeof rootPtr.toJSON === "function")
+              rootPtr = rootPtr.toJSON();
+            expect(meta).to.deep.equal({
+              config: {
+                order: 1024,
+              },
+              rootPtr: rootPtr,
+            });
           });
         });
       })
@@ -1133,6 +1171,24 @@ fileStoreFactory.after = (store) => {
           }).then(() => {
             tree.rollback();
             return tree.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+          });
+        });
+      })
+
+      it("can commit tree, write meta and reopen", function() {
+        return deserializeTree(this.store, {
+          keys: [],
+          values: [],
+        }).then(ptr => {
+          let tree1 = new Tree(this.store, ptr);
+          return tree1.insert(1, 10).then(() => {
+            return tree1.commit("commit");
+          }).then(() => {
+            return Tree.open(this.store, "commit");
+          }).then(tree2 => {
+            return tree2.get(1);
           }).then(value => {
             expect(value).to.equal(10);
           });
