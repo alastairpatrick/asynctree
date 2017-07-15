@@ -228,22 +228,26 @@ describe("FileStore", function() {
     });
   })
 
-  it("writes index", function() {
+  it("returns meta directory path", function() {
+    expect(this.store.metaDir()).to.equal(join(TEMP_DIR, "meta"));
+  });
+
+  it("writes meta file", function() {
     return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
       let indexPath = join(TEMP_DIR, "meta", "index");
       expect(JSON.parse(readFileSync(indexPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
-  it("reads index", function() {
+  it("reads meta file", function() {
     return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
       return this.store.readMeta("index");
     }).then(index => {
-      expect(index).to.deep.equal({ rootPtr: this.ptr1 });      
+      expect(index).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
-  it("readMeta returns undefined for non-existent name", function() {
+  it("readMeta throws exception non-existent name", function() {
     return this.store.readMeta("gone").then(index => {
       expect.fail("Did not throw");
     }).catch(error => {

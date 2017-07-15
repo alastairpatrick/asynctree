@@ -223,14 +223,18 @@ class FileStore {
   }
 
   readMeta(path) {
-    let metaPath = join(this.dir, "meta", path);
+    let metaPath = join(this.metaDir(), path);
     return readFile(metaPath, { encoding: "utf-8" }).then(JSON.parse);
   }
 
   writeMeta(path, data) {
-    let metaPath = join(this.dir, "meta", path);
+    let metaPath = join(this.metaDir(), path);
     let text = JSON.stringify(data);
     return this.writeFileAtomic_(metaPath, text, { mode: this.config.fileMode });
+  }
+
+  metaDir() {
+    return join(this.dir, "meta");
   }
 
   ptrPath_(ptr) {
