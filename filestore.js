@@ -223,13 +223,14 @@ class FileStore {
   }
 
   readMeta(path) {
-    let indexPath = join(this.dir, path);
-    return readFile(indexPath, { encoding: "utf-8" }).then(JSON.parse);
+    let metaPath = join(this.dir, "meta", path);
+    return readFile(metaPath, { encoding: "utf-8" }).then(JSON.parse);
   }
 
-  writeMeta(path, index) {
-    let indexPath = join(this.dir, path);
-    return this.writeFileAtomic_(indexPath, JSON.stringify(index), { mode: this.config.fileMode });
+  writeMeta(path, data) {
+    let metaPath = join(this.dir, "meta", path);
+    let text = JSON.stringify(data);
+    return this.writeFileAtomic_(metaPath, text, { mode: this.config.fileMode });
   }
 
   ptrPath_(ptr) {
@@ -277,16 +278,7 @@ class FileStore {
       }
       
       return promise.then(buffer => {
-        return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode }).catch(error => {
-          if (error.code !== "ENOENT")
-            throw error;
-          return mkdir(dirname(path)).catch(error => {
-            if (error.code !== "EEXIST")
-              throw error;
-          }).then(() => {
-            return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode })
-          });
-        });
+        return this.writeFileAtomic_(path, buffer, { mode: this.config.fileMode });
       });
     });
   }
@@ -298,6 +290,16 @@ class FileStore {
     ++tempCount;
     return writeFile(tempPath, data, options).then(() => {
       return rename(tempPath, path).catch(error => {
+        if (error.code !== "ENOENT")
+          throw error;
+
+        return mkdir(dirname(path)).catch(mkdirError => {
+          if (mkdirError.code !== "EEXIST")
+            throw error;
+        }).then(() => {
+          return rename(tempPath, path);
+        });
+      }).catch(error => {
         return unlink(tempPath).catch(() => {
           throw error;
         }).then(() => {

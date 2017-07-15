@@ -230,7 +230,7 @@ describe("FileStore", function() {
 
   it("writes index", function() {
     return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
-      let indexPath = join(TEMP_DIR, "index");
+      let indexPath = join(TEMP_DIR, "meta", "index");
       expect(JSON.parse(readFileSync(indexPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
