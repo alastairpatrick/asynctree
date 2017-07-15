@@ -249,6 +249,9 @@ class Publisher {
         return this.client.query(`ROLLBACK`).then(() => createSlot(true));
       });
     }).then(() => {
+      return this.client.query("SHOW SERVER_ENCODING");
+    }).then(result => {
+      this.encoding = result.rows[0].server_encoding;
       return fn();
     }).then(result => {
       return this.client.query(`COMMIT`).then(() => {
@@ -291,7 +294,7 @@ class Publisher {
       let child = spawn("pg_recvlogical", [`--start`, `--slot=${this.slotName}`, `--file=-`, `--dbname=${connect.database}`, `--option=skip-empty-xacts=1`], options);
 
       let unparsed = "";
-      let decoder = new StringDecoder("utf8");
+      let decoder = new StringDecoder(this.encoding);
 
       let writable = new Writable();
       writable._write = (chunk, enc, next) => {
