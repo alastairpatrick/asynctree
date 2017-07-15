@@ -34,7 +34,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: {},
+      rows: [{}],
     });
   })
 
@@ -43,7 +43,7 @@ describe("Parse event", function() {
       type: "INSERT",
       schema: "public",
       name: "foo",
-      row: {},
+      rows: [{}],
     });
   })
 
@@ -52,7 +52,7 @@ describe("Parse event", function() {
       type: "DELETE",
       schema: "public",
       name: "foo",
-      row: {},
+      rows: [{}],
     });
   })
 
@@ -61,7 +61,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: null },
+      rows: [{ c1: null }],
     });
   })
 
@@ -70,7 +70,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: true, c2: false },
+      rows: [{ c1: true, c2: false }],
     });
   })
 
@@ -79,7 +79,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: -7.25 }
+      rows: [{ c1: -7.25 }],
     });
   })
 
@@ -88,7 +88,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: -7 },
+      rows: [{ c1: -7 }],
     });
   })
 
@@ -97,7 +97,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: "\\Hello, 'Al'\n" },
+      rows: [{ c1: "\\Hello, 'Al'\n" }],
     });
   })
 
@@ -106,7 +106,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { c1: [1, 2], c2: null },
+      rows: [{ c1: [1, 2], c2: null }],
     });
   })
 
@@ -115,7 +115,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "quoted.schema",
       name: "foo",
-      row: {},
+      rows: [{}],
     });
   })
 
@@ -124,7 +124,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "quoted.table",
-      row: {},
+      rows: [{}],
     });
   })
 
@@ -133,7 +133,7 @@ describe("Parse event", function() {
       type: "UPDATE",
       schema: "public",
       name: "foo",
-      row: { myCol: "Hello" },
+      rows: [{ myCol: "Hello" }],
     });
   })
 })
@@ -147,7 +147,7 @@ describe("Parse lines", function() {
         type: "UPDATE",
         schema: "public",
         name: "foo",
-        row: { col: "2" },
+        rows: [{ col: "2" }],
       });
     });
   })
@@ -176,7 +176,7 @@ describe("Parse lines", function() {
         type: "UPDATE",
         schema: "public",
         name: "foo",
-        row: { col: "foo\n" },
+        rows: [{ col: "foo\n" }],
       });
     });
   })
@@ -189,7 +189,7 @@ describe("Parse lines", function() {
         type: "UPDATE",
         schema: "public",
         name: "foo",
-        row: { "c\nol": "3" },
+        rows: [{ "c\nol": "3" }],
       });
     });
   })

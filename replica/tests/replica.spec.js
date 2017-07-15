@@ -70,7 +70,7 @@ describe("Replica", function() {
       type: "UPDATE",
       schema: "public",
       name: "employee",
-      row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber" },
+      rows: [{ id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -88,7 +88,7 @@ describe("Replica", function() {
       type: "UPDATE",
       schema: "public",
       name: "employee",
-      row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber", extra: "ignored" },
+      rows: [{ id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber", extra: "ignored" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -106,7 +106,7 @@ describe("Replica", function() {
       type: "INSERT",
       schema: "public",
       name: "employee",
-      row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" },
+      rows: [{ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -124,7 +124,7 @@ describe("Replica", function() {
       type: "INSERT",
       schema: "public",
       name: "employee",
-      row: { id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist", extra: "ignored" },
+      rows: [{ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist", extra: "ignored" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -142,7 +142,7 @@ describe("Replica", function() {
       type: "DELETE",
       schema: "public",
       name: "employee",
-      row: { id: 3 },
+      rows: [{ id: 3 }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -162,7 +162,7 @@ describe("Replica", function() {
         type: "UPDATE",
         schema: "public",
         name: "project",
-        row: { id: 2, name: i },
+        rows: [{ id: 2, name: i }],
       }));
     }
     return promise.then(() => {
@@ -188,7 +188,7 @@ describe("Replica", function() {
       type: "INSERT",
       schema: "unknown",
       name: "employee",
-      row: { foo: "bar" },
+      rows: [{ foo: "bar" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",
@@ -202,7 +202,7 @@ describe("Replica", function() {
       type: "INSERT",
       schema: "public",
       name: "unknown",
-      row: { foo: "bar" },
+      rows: [{ foo: "bar" }],
     }).then(() => {
       return this.replica.onEvent({
         type: "COMMIT",

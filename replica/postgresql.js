@@ -190,7 +190,7 @@ const parseRecvLine = (line) => {
       type: match.operation,
       schema: unquote(match.schema),
       name: unquote(match.table),
-      row: row,
+      rows: [row],
     };
   } else {
     return {

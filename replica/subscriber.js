@@ -27,29 +27,12 @@ class Subscriber extends Replica {
           if (!rows.length)
             return;
 
-          let indexIdx = -1;
-          const copyIndices = () => {
-            ++indexIdx;
-            if (indexIdx >= table.indices.length)
-              return;
-
-            let index = table.indices[indexIdx];
-            let keyPath = index.keyPath;
-            if (indexIdx > 0 && !index.unique)
-              keyPath = keyPath.concat(primaryKeyPath);
-
-            let bulkRows = [];
-            let keyPrefix = [tableIdx, indexIdx];
-            rows.forEach(row => {
-              let key = keyPrefix.concat(keyPath.map(c => row[c]));
-              let value = row.map;
-              bulkRows.push([key, row]);
-            });
-
-            return this.uncommitted.bulk(bulkRows).then(copyIndices);
-          };
-
-          return copyIndices().then(copyRows);
+          return this.onEvent({
+            type: "INSERT",
+            schema: table.schema,
+            name: table.name,
+            rows: rows,
+          }).then(copyRows);
         })
       };
 
@@ -57,7 +40,10 @@ class Subscriber extends Replica {
     }
 
     return publisher.snapshot(copyTables).then(() => {
-      return this.commit("initial");
+      return this.onEvent({
+        type: "COMMIT",
+        tx: "initial",
+      });
     });
   }
 

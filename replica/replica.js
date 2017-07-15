@@ -47,25 +47,28 @@ class Replica {
             keyPath = keyPath.concat(primaryKeyPath);
 
           let keyPrefix = [tableIdx, indexIdx];
-          let key = keyPrefix.concat(keyPath.map(c => event.row[c]));
 
-          let value;
-          if (table.columns === undefined) {
-            value = event.row;
-          } else {
-            value = {};
-            for (let cn in table.columns) {
-              if (has.call(table.columns, cn)) {
-                value[cn] = event.row[cn];
+          event.rows.forEach(row => {
+            let key = keyPrefix.concat(keyPath.map(c => row[c]));
+
+            let value;
+            if (table.columns === undefined) {
+              value = row;
+            } else {
+              value = {};
+              for (let cn in table.columns) {
+                if (has.call(table.columns, cn)) {
+                  value[cn] = row[cn];
+                }
               }
             }
-          }
 
-          if (event.type === "DELETE") {
-            this.streaming.rows.push([key]);
-          } else {
-            this.streaming.rows.push([key, value]);
-          }
+            if (event.type === "DELETE") {
+              this.streaming.rows.push([key]);
+            } else {
+              this.streaming.rows.push([key, value]);
+            }
+          });
         });
       }
     }

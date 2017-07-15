@@ -179,7 +179,7 @@ describe("Subscriber", function() {
       type: "UPDATE",
       schema: "public",
       name: "employee",
-      row: { id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber" },
+      rows: [{ id: 2, first_name: "Blaise", last_name: "Pascal", occupation: "Plumber" }],
     });
     this.publisher.events.push({
       type: "COMMIT",
