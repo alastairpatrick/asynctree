@@ -1,12 +1,13 @@
 "use strict";
 
 const { spawn } = require("child_process");
+const pg = require("pg");
+const PGCursor = require("pg-cursor");
 const { Writable } = require("stream");
 const { StringDecoder } = require("string_decoder");
 const XRegExp = require('xregexp');
 
-const pg = require("pg");
-const PGCursor = require("pg-cursor");
+const { Publisher } = require("./publisher");
 
 const has = Object.prototype.hasOwnProperty;
 
@@ -200,8 +201,9 @@ const parseRecvLine = (line) => {
   }
 }
 
-class Publisher {
-  constructor(client, slotName = "replica") {
+class PGPublisher extends Publisher {
+  constructor(store, config, client, slotName = "replica") {
+    super(store, config);
     this.client = client;
     this.slotName = slotName;
     this.createdSlot = false;
@@ -221,7 +223,7 @@ class Publisher {
     }));
   }
 
-  snapshot(fn) {
+  snapshot() {
     const createSlot = (drop) => {
       let promise = this.client.query(`
         BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -252,7 +254,7 @@ class Publisher {
       return this.client.query("SHOW SERVER_ENCODING");
     }).then(result => {
       this.encoding = result.rows[0].server_encoding;
-      return fn();
+      return this.copyTables();
     }).then(result => {
       return this.client.query(`COMMIT`).then(() => {
         this.createdSlot = true;
@@ -272,9 +274,9 @@ class Publisher {
       ORDER BY ${orderByKeyPath.map(c => `"${c}"`).join(", ")}
              ;`;
     return new Cursor(this.client.query(new PGCursor(sql)));
-  }
+   }
 
-  stream(handleEvent) {
+  stream() {
     return new Promise((resolve, reject) => {
       let connect = this.client;
       let options = {
@@ -303,7 +305,7 @@ class Publisher {
         else
           unparsed += decoder.write(chunk);
 
-        return parseRecvLines(unparsed, handleEvent).then(rest => {
+        return parseRecvLines(unparsed, this.replica.onEvent.bind(this.replica)).then(rest => {
           unparsed = rest;
           next();
         }).catch(error => {
@@ -324,7 +326,7 @@ class Publisher {
 }
 
 module.exports = {
-  Publisher,
+  PGPublisher,
   parseRecvLine,
   parseRecvLines,
 }

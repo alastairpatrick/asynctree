@@ -13,6 +13,8 @@ class Replica {
     this.uncommitted = tree.clone();
     this.indexName = undefined;
 
+    this.onEvent = this.onEvent.bind(this);
+    
     let byName = {};
     this.streaming = {
       byName: byName,

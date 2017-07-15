@@ -5,29 +5,33 @@ const { Tree } = require("..");
 
 const has = Object.prototype.hasOwnProperty;
 
-class Subscriber extends Replica {
+class Publisher {
   constructor(store, config) {
     let tree = Tree.empty(store);
-    super(tree, config);
+    this.replica = new Replica(tree, config);
   }
 
-  snapshot(publisher) {
+  copyTables() {
+    let config = this.replica.config;
+
     let tableIdx = -1;
     const copyTables = () => {
       ++tableIdx;
-      if (tableIdx >= this.config.tables.length)
-        return;
+      let config = this.replica.config;
+
+      if (tableIdx >= config.tables.length)
+        return Promise.resolve();
       
-      let table = this.config.tables[tableIdx];
+      let table = config.tables[tableIdx];
       let primaryKeyPath = table.indices[0].keyPath;
-      let cursor = publisher.query(table, primaryKeyPath);
+      let cursor = this.query(table, primaryKeyPath);
 
       const copyRows = () => {
         return cursor.read().then(rows => {
           if (!rows.length)
             return;
 
-          return this.onEvent({
+          return this.replica.onEvent({
             type: "INSERT",
             schema: table.schema,
             name: table.name,
@@ -39,27 +43,21 @@ class Subscriber extends Replica {
       return copyRows().then(copyTables);
     }
 
-    return publisher.snapshot(copyTables).then(() => {
-      return this.onEvent({
+    return copyTables().then(() => {
+      return this.replica.onEvent({
         type: "COMMIT",
         tx: "initial",
       });
     });
   }
 
-  stream(publisher) {
-    return publisher.stream(this.onEvent.bind(this)).then(() => {
-      return this.flush();
-    });
-  }
-
-  replicate(publisher) {
-    return this.snapshot(publisher).then(() => {
-      return this.stream(publisher);
+  replicate() {
+    return this.snapshot().then(() => {
+      return this.stream();
     });
   }
 }
 
 module.exports = {
-  Subscriber,
+  Publisher,
 }

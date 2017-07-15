@@ -4,7 +4,7 @@ const { expect } = require("chai");
 const { join } = require("path");
 const sinon = require("sinon");
 
-const { Subscriber } = require("../subscriber");
+const { Publisher } = require("../publisher");
 const { Tree } = require("../..");
 const { TestStore } = require("../../tests/teststore");
 
@@ -31,14 +31,15 @@ class TestCursor {
   }
 }
 
-class TestPublisher {
-  constructor(tables) {
+class TestPublisher extends Publisher {
+  constructor(store, config, tables) {
+    super(store, config)
     this.tables = tables;
     this.events = [];
   }
 
-  snapshot(fn) {
-    return Promise.resolve().then(fn);
+  snapshot() {
+    return this.copyTables();
   }
 
   query(table) {
@@ -46,17 +47,18 @@ class TestPublisher {
     return new TestCursor(this.tables[name]);
   }
 
-  stream(handleEvent) {
+  stream() {
     if (this.events.length === 0)
       return Promise.resolve();
     
-    return Promise.resolve(handleEvent(this.events.shift())).then(() => {
-      return this.stream(handleEvent);
+    let event = this.events.shift();
+    return Promise.resolve(this.replica.onEvent(event)).then(() => {
+      return this.stream();
     });
   }
 }
 
-describe("Subscriber", function() {
+describe("Publisher", function() {
   beforeEach(function() {
     this.config = {
       bulkSize: 100,
@@ -98,12 +100,12 @@ describe("Subscriber", function() {
     };
 
     this.store = new TestStore();
-    this.publisher = new TestPublisher(this.tables);
-    this.replica = new Subscriber(this.store, this.config);
+    this.publisher = new TestPublisher(this.store, this.config, this.tables);
+    this.replica = this.publisher.replica;
   });
 
   it("loads existing rows of each index", function() {
-    return this.replica.snapshot(this.publisher).then(() => {
+    return this.publisher.snapshot().then(() => {
       let result = [];
       return this.replica.tree.forEach((value, key) => {
         result.push([key, value]);
@@ -161,7 +163,7 @@ describe("Subscriber", function() {
   });
 
   it("streams no events", function() {
-    return this.replica.replicate(this.publisher);
+    return this.publisher.replicate();
   })
 
   it("writes index on commit", function() {
@@ -169,7 +171,7 @@ describe("Subscriber", function() {
       type: "COMMIT",
       tx: "txname",
     });
-    return this.replica.replicate(this.publisher).then(() => {
+    return this.publisher.replicate().then(() => {
       expect(this.replica.indexName).to.equal("txname");
     });
   })
@@ -185,7 +187,7 @@ describe("Subscriber", function() {
       type: "COMMIT",
       tx: "1",
     });
-    return this.replica.replicate(this.publisher).then(() => {
+    return this.publisher.replicate().then(() => {
       return this.replica.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");

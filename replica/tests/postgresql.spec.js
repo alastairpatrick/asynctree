@@ -4,7 +4,8 @@ const { expect } = require("chai");
 const { Client } = require("pg");
 const sinon = require("sinon");
 
-const { Publisher } = require("../postgresql");
+const { PGPublisher } = require("../postgresql");
+const { TestStore } = require("../../tests/teststore");
 
 const has = Object.prototype.hasOwnProperty;
 
@@ -22,13 +23,17 @@ const readAll = (cursor) => {
 }
 
 // Need to have a database configured to run these tests so they are disabled.
-xdescribe("Publisher", function() {
+describe("Publisher", function() {
   beforeEach(function() {
     this.client = new Client({
       connectionString: "postgres://postgres@localhost:5432/zeta",
     });
     this.client.connect();
-    this.publisher = new Publisher(this.client);
+    this.store = new TestStore();
+    this.config = {
+      tables: [],
+    }
+    this.publisher = new PGPublisher(this.store, this.config, this.client);
   })
 
   afterEach(function() {
@@ -47,7 +52,7 @@ xdescribe("Publisher", function() {
   });
 
   it("query rows of table in snapshot transaction", function() {
-    return this.publisher.snapshot(() => {
+    return this.publisher.snapshot().then(() => {
       let cursor = this.publisher.query({
         "schema": "pg_catalog",
         "name": "pg_class",
