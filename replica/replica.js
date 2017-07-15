@@ -10,6 +10,7 @@ class Replica {
 
     this.config = config;
     this.tree = tree;
+    this.indexName = undefined;
   }
 
   snapshot(publisher) {
@@ -59,6 +60,8 @@ class Replica {
 
     return publisher.snapshot(copyTables).then(() => {
       return this.tree.commit("initial");
+    }).then(() => {
+      this.indexName = "initial";
     });
   }
 
@@ -91,6 +94,7 @@ class Replica {
       writing = writing.then(() => {
         return this.tree.commit(name)
       }).then(() => {
+        this.indexName = name;
         count = 0;
       });
     }

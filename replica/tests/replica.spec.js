@@ -110,6 +110,7 @@ describe("Replica", function() {
       return this.tree.forEach((value, key) => {
         result.push([key, value]);
       }).then(() => {
+        expect(this.replica.indexName).to.equal("initial");
         expect(result).to.deep.equal([
           [[0, 0, 1], {
             id: 1,
@@ -163,6 +164,16 @@ describe("Replica", function() {
 
   it("streams no events", function() {
     return this.replica.replicate(this.publisher);
+  })
+
+  it("writes index on commit", function() {
+    this.publisher.events.push({
+      type: "COMMIT",
+      tx: "txname",
+    });
+    return this.replica.replicate(this.publisher).then(() => {
+      expect(this.replica.indexName).to.equal("txname");
+    });
   })
 
   it("streams row update", function() {
