@@ -1,11 +1,13 @@
 "use strict";
 
 const { Replica } = require ("./replica");
+const { Tree } = require("..");
 
 const has = Object.prototype.hasOwnProperty;
 
 class Subscriber extends Replica {
-  constructor(tree, config) {
+  constructor(store, config) {
+    let tree = Tree.empty(store);
     super(tree, config);
   }
 
@@ -44,7 +46,7 @@ class Subscriber extends Replica {
               bulkRows.push([key, row]);
             });
 
-            return this.tree.bulk(bulkRows).then(copyIndices);
+            return this.uncommitted.bulk(bulkRows).then(copyIndices);
           };
 
           return copyIndices().then(copyRows);
@@ -55,9 +57,7 @@ class Subscriber extends Replica {
     }
 
     return publisher.snapshot(copyTables).then(() => {
-      return this.tree.commit("initial");
-    }).then(() => {
-      this.indexName = "initial";
+      return this.commit("initial");
     });
   }
 

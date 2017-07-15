@@ -40,8 +40,8 @@ describe("Replica", function() {
     };
 
     this.store = new TestStore();
-    this.tree = Tree.empty(this.store);
-    this.replica = new Replica(this.tree, this.config);
+    let tree = Tree.empty(this.store);
+    this.replica = new Replica(tree, this.config);
 
     let rows = [
       [[0, 0, 1], { id: 1, first_name: "Albert", last_name: "Einstein", occupation: "Physicist" }],
@@ -53,7 +53,7 @@ describe("Replica", function() {
       [[1, 0, 1], { id: 1, name: "R&D" }],
       [[1, 0, 2], { id: 2, name: "Mining" }],
     ];
-    return this.tree.bulk(rows);
+    return tree.bulk(rows);
   });
 
   it("writes index on commit", function() {
@@ -77,7 +77,7 @@ describe("Replica", function() {
         tx: "1",
       });
     }).then(() => {
-      return this.tree.get([0, 0, 2]);
+      return this.replica.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");
     });
@@ -95,7 +95,7 @@ describe("Replica", function() {
         tx: "1",
       });
     }).then(() => {
-      return this.tree.get([0, 0, 2]);
+      return this.replica.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");
     });
@@ -113,7 +113,7 @@ describe("Replica", function() {
         tx: "1",
       });
     }).then(() => {
-      return this.tree.get([0, 0, 4]);
+      return this.replica.tree.get([0, 0, 4]);
     }).then(value => {
       expect(value).to.deep.equal({ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" });
     });
@@ -131,7 +131,7 @@ describe("Replica", function() {
         tx: "1",
       });
     }).then(() => {
-      return this.tree.get([0, 0, 4]);
+      return this.replica.tree.get([0, 0, 4]);
     }).then(value => {
       expect(value).to.deep.equal({ id: 4, first_name: "Marie", last_name: "Curie", occupation: "Physicist" });
     });
@@ -149,7 +149,7 @@ describe("Replica", function() {
         tx: "1",
       });
     }).then(() => {
-      return this.tree.get([0, 0, 3]);
+      return this.replica.tree.get([0, 0, 3]);
     }).then(value => {
       expect(value).to.be.undefined;
     });
@@ -166,7 +166,7 @@ describe("Replica", function() {
       }));
     }
     return promise.then(() => {
-      return this.tree.get([1, 0, 2]);
+      return this.replica.uncommitted.get([1, 0, 2]);
     }).then(value => {
       expect(value.name).to.equal(this.config.bulkSize - 1);
     });

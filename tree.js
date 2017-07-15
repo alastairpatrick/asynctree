@@ -82,6 +82,10 @@ class Tree {
     });
   }
 
+  clone(TreeClass=Tree) {
+    return new TreeClass(this.store, this.rootPtr, this.config);
+  }
+
   /**
    * Compare a pair of keys. When keys are of different types, the order is
    * boolean < number < string < array < object < null.

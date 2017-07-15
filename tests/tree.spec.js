@@ -161,7 +161,23 @@ fileStoreFactory.after = (store) => {
           expect.fail("Did not throw");
         }).catch(error => {
         });
-      })    
+      })
+
+      it("cloned tree does not see subsequent changes to original vice-versa", function() {
+        let original = Tree.empty(this.store);
+        let clone = original.clone();
+
+        return original.set(1, 10).then(() => {
+          return clone.set(2, 20);
+        }).then(() => {
+          return original.get(2);
+        }).then(value => {
+          expect(value).to.be.undefined;
+          return clone.get(1);
+        }).then(value => {
+          expect(value).to.be.undefined;
+        });        
+      });
     })
 
     describe("set", function() {

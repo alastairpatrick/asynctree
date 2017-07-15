@@ -98,15 +98,14 @@ describe("Subscriber", function() {
     };
 
     this.store = new TestStore();
-    this.tree = Tree.empty(this.store);
     this.publisher = new TestPublisher(this.tables);
-    this.replica = new Subscriber(this.tree, this.config);
+    this.replica = new Subscriber(this.store, this.config);
   });
 
   it("loads existing rows of each index", function() {
     return this.replica.snapshot(this.publisher).then(() => {
       let result = [];
-      return this.tree.forEach((value, key) => {
+      return this.replica.tree.forEach((value, key) => {
         result.push([key, value]);
       }).then(() => {
         expect(this.replica.indexName).to.equal("initial");
@@ -187,7 +186,7 @@ describe("Subscriber", function() {
       tx: "1",
     });
     return this.replica.replicate(this.publisher).then(() => {
-      return this.tree.get([0, 0, 2]);
+      return this.replica.tree.get([0, 0, 2]);
     }).then(value => {
       expect(value.occupation).to.equal("Plumber");
     });

@@ -9,7 +9,8 @@ class Replica {
     }, config);
 
     this.config = config;
-    this.tree = tree;
+    this.committed = tree;
+    this.uncommitted = tree.clone();
     this.indexName = undefined;
 
     let byName = {};
@@ -26,9 +27,13 @@ class Replica {
     });
   }
 
+  get tree() {
+    return this.committed;
+  }
+
   onEvent(event) {
     if (event.type === "COMMIT") {
-      return this.commit_(event.tx);
+      return this.commit(event.tx);
     } else if (event.type === "UPDATE" || event.type === "INSERT" || event.type === "DELETE") {
       let byName = this.streaming.byName;
       if (has.call(byName, event.schema) && has.call(byName[event.schema], event.name)) {
@@ -79,15 +84,17 @@ class Replica {
     this.streaming.count += rows.length;
     this.streaming.rows = [];
     return this.streaming.writing = this.streaming.writing.then(() => {
-      return this.tree.bulk(rows)
+      return this.uncommitted.bulk(rows)
     });
   }
 
-  commit_(name) {
+  commit(name) {
     this.flush();
     return this.streaming.writing = this.streaming.writing.then(() => {
-      return this.tree.commit(name)
+      return this.uncommitted.commit(name)
     }).then(() => {
+      this.committed = this.uncommitted;
+      this.uncommitted = this.uncommitted.clone();
       this.indexName = name;
       this.streaming.count = 0;
     });
