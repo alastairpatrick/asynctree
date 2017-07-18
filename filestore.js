@@ -9,8 +9,6 @@ const zlib = require("zlib");
 const { promisify } = require("./promisify");
 const { PTR } = require("./tree");
 
-const MUST_WRITE = Symbol("MUST_WRITE");
-
 const has = Object.prototype.hasOwnProperty;
 
 const mkdir = promisify(fs.mkdir);
@@ -36,13 +34,6 @@ const cleanup = () => {
 
 process.on("exit", cleanup);
 process.on("SIGINT", cleanup);
-
-const ensureDir = (dir) => {
-  return mkdir(dir).catch(error => {
-    if (error.code !== "EEXIST")
-      throw error;
-  })
-}
 
 class Ptr {
   constructor(store, node) {
