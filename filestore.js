@@ -173,28 +173,22 @@ class FileStore {
     ptr.node = undefined;
     ptr.hash = undefined;
   }
-  
-  schedulePathTask_(path, task) {
-    let pathTask = this.pathTasks.get(path);
-    if (pathTask === undefined) {
-      pathTask = {
-        count: 0,
-        promise: Promise.resolve(),
-      };
-      this.pathTasks.set(path, pathTask);
-    }
-    ++pathTask.count;
-    return pathTask.promise = pathTask.promise.then(task).catch(error => {
-      if (--pathTask.count === 0)
-        this.pathTasks.delete(path);
-      throw error;
-    }).then(result => {
-      if (--pathTask.count === 0)
-        this.pathTasks.delete(path);
-      return result;
+
+  metaPath() {
+    return join(this.dir, "meta");
+  }
+
+  readMeta() {
+    if (this.meta !== undefined)
+      return Promise.resolve(this.meta);
+    return readFile(this.metaPath(), { encoding: "utf-8" }).then(text => {
+      return this.meta = JSON.parse(text);
     });
   }
 
+  writeMeta(meta) {
+    this.meta = meta;
+  }
 
   flush() {
     for (let node of this.writes) {
@@ -216,21 +210,26 @@ class FileStore {
       this.cache.clear();
     });
   }
-
-  readMeta() {
-    if (this.meta !== undefined)
-      return Promise.resolve(this.meta);
-    return readFile(this.metaPath(), { encoding: "utf-8" }).then(text => {
-      return this.meta = JSON.parse(text);
+  
+  schedulePathTask_(path, task) {
+    let pathTask = this.pathTasks.get(path);
+    if (pathTask === undefined) {
+      pathTask = {
+        count: 0,
+        promise: Promise.resolve(),
+      };
+      this.pathTasks.set(path, pathTask);
+    }
+    ++pathTask.count;
+    return pathTask.promise = pathTask.promise.then(task).catch(error => {
+      if (--pathTask.count === 0)
+        this.pathTasks.delete(path);
+      throw error;
+    }).then(result => {
+      if (--pathTask.count === 0)
+        this.pathTasks.delete(path);
+      return result;
     });
-  }
-
-  writeMeta(meta) {
-    this.meta = meta;
-  }
-
-  metaPath() {
-    return join(this.dir, "meta");
   }
 
   ptrPath_(ptr) {
