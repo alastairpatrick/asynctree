@@ -215,29 +215,38 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   set(key, value, type) {
-    return this.set_(key, value, type);
-  }
-
-  set_(key, value, type) {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
-    let rootPtr = this.rootPtr;
+    let oldRootPtr = this.rootPtr;
+    this.rootPtr = undefined;
+    return this.set_(key, value, type, oldRootPtr).then(({ rootPtr, oldValue }) => {
+      this.store.writeMeta({
+        rootPtr: rootPtr,
+        config: this.config,
+      });
+
+      this.rootPtr = rootPtr;
+      return oldValue;
+    }).catch(error => {
+      this.rootPtr = oldRootPtr;
+      throw error;
+    });
+  }
+
+  set_(key, value, type, rootPtr) {
     let dummyRoot = {
       keys: [],
       children: [rootPtr],
     };
-    this.rootPtr = undefined;
     return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue }) => {
       if (dummyRoot.children.length === 1) {
-        this.rootPtr = dummyRoot.children[0];
+        rootPtr = dummyRoot.children[0];
       } else {
         this.store.write(node);
-        this.rootPtr = node[PTR];
+        rootPtr = node[PTR];
       }
-      return oldValue;
-    }).catch(error => {
-      this.rootPtr = rootPtr;
-      throw error;
+
+      return { oldValue, rootPtr };
     });
   }
 
@@ -306,32 +315,43 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   delete(key) {
-    return this.delete_(key);
-  }
-
-  delete_(key) {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
-    let rootPtr = this.rootPtr;
+    let oldRootPtr = this.rootPtr;
     this.rootPtr = undefined;
+    return this.delete_(key, oldRootPtr).then(({ rootPtr, oldValue }) => {
+      if (oldValue === undefined) {
+        this.rootPtr = oldRootPtr;
+        return;
+      }
+
+      this.store.writeMeta({
+        rootPtr: rootPtr,
+        config: this.config,
+      })
+
+      this.rootPtr = rootPtr;
+      return oldValue;
+    }).catch(error => {
+      this.rootPtr = oldRootPtr;
+      throw error;
+    });
+  }
+
+  delete_(key, rootPtr) {
     return this.store.read(rootPtr).then(node => {
       node = cloneNode(node);
       return this.deleteSubTree_(key, node);
     }).then(({ node, idx, oldValue }) => {
-      if (oldValue === undefined) {
-        this.rootPtr = rootPtr;
-      } else {
+      if (oldValue !== undefined) {
         if (node.children && node.children.length === 1) {
-          this.rootPtr = node.children[0];
+          rootPtr = node.children[0];
         } else {
           this.store.write(node);
-          this.rootPtr = node[PTR];
+          rootPtr = node[PTR];
         }
       }
-      return oldValue;
-    }).catch(error => {
-      this.rootPtr = rootPtr;
-      throw error;
+      return { rootPtr, oldValue };
     });
   }
 
@@ -428,20 +448,34 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   bulk(items) {
-    return this.bulk_(items);
+    if (this.rootPtr === undefined)
+      throw new Error("Operation in progress");
+    let oldRootPtr = this.rootPtr;
+    this.rootPtr = undefined;
+    return this.bulk_(items, oldRootPtr).then(({ rootPtr }) => {
+      this.store.writeMeta({
+        rootPtr: rootPtr,
+        config: this.config,
+      });
+      
+      this.rootPtr = rootPtr;
+    }).catch(error => {
+      this.rootPtr = oldRootPtr;
+      throw error;
+    });
   }
 
-  bulk_(items) {
+  bulk_(items, rootPtr) {
     // Sorting is optional but makes node caching by the backing store more effective. Sort must be stable,
     // otherwise operations on the same key could be reordered.
     items = stable(items, (a, b) => this.cmp(a[0], b[0]));
     
-    let chain = Promise.resolve();
+    let chain = Promise.resolve({ rootPtr });
     items.forEach(item => {
       if (item.length === 1)
-        chain = chain.then(() => this.delete_(item[0]));
+        chain = chain.then(({ rootPtr }) => this.delete_(item[0], rootPtr));
       else
-        chain = chain.then(() => this.set_(item[0], item[1]));
+        chain = chain.then(({ rootPtr }) => this.set_(item[0], item[1], "upsert", rootPtr));
     });
     return chain;
   }

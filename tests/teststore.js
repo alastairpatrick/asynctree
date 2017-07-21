@@ -9,7 +9,7 @@ class TestStore {
   constructor() {
     this.nodes = {};
     this.ptr = 1000;
-    this.indexPtr = undefined;
+    this.meta = undefined;
   }
   
   read(ptr) {
@@ -33,15 +33,14 @@ class TestStore {
     delete this.nodes[ptr];
   }
 
-  readMeta(path) {
-    if (this.index === undefined)
+  readMeta() {
+    if (this.meta === undefined)
       return Promise.reject(new Error("Not found"));
-    return Promise.resolve(this.index);
+    return Promise.resolve(this.meta);
   }
 
-  writeMeta(path, index) {
-    this.index = index;
-    return Promise.resolve();
+  writeMeta(path, meta) {
+    this.meta = meta;
   }
 
   flush() {

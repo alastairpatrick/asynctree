@@ -228,30 +228,23 @@ describe("FileStore", function() {
     });
   })
 
-  it("returns meta directory path", function() {
-    expect(this.store.metaDir()).to.equal(join(TEMP_DIR, "meta"));
+  it("returns meta path", function() {
+    expect(this.store.metaPath()).to.equal(join(TEMP_DIR, "meta"));
   });
 
   it("writes meta file", function() {
-    return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
-      let indexPath = join(TEMP_DIR, "meta", "index");
-      expect(JSON.parse(readFileSync(indexPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
+    this.store.writeMeta({ rootPtr: this.ptr1 });
+    return this.store.flush().then(() => {
+      let metaPath = join(TEMP_DIR, "meta");
+      expect(JSON.parse(readFileSync(metaPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
   it("reads meta file", function() {
-    return this.store.writeMeta("index", { rootPtr: this.ptr1 }).then(() => {
-      return this.store.readMeta("index");
-    }).then(index => {
+    this.store.writeMeta({ rootPtr: this.ptr1 });
+    return this.store.readMeta().then(index => {
       expect(index).to.deep.equal({ rootPtr: this.ptr1 });
     });
-  });
-
-  it("readMeta throws exception non-existent name", function() {
-    return this.store.readMeta("gone").then(index => {
-      expect.fail("Did not throw");
-    }).catch(error => {
-    });;
   });
 
   it("exception if file mode does not allow read and write access to user", function() {

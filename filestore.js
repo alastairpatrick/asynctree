@@ -77,6 +77,7 @@ class FileStore {
     this.pathTasks = new Map();
     this.writes = new Set();
     this.cache = new Map();
+    this.meta = undefined;
   }
   
   createHasher() {
@@ -204,7 +205,10 @@ class FileStore {
     for (let task of this.pathTasks.values())
       promises.push(task.promise);
     
-    return Promise.all(promises);
+    return Promise.all(promises).then(() => {
+      let text = JSON.stringify(this.meta);
+      return this.writeFileAtomic_(this.metaPath(), text, { mode: this.config.fileMode });
+    });
   }
 
   sync() {
@@ -213,18 +217,19 @@ class FileStore {
     });
   }
 
-  readMeta(path) {
-    let metaPath = join(this.metaDir(), path);
-    return readFile(metaPath, { encoding: "utf-8" }).then(JSON.parse);
+  readMeta() {
+    if (this.meta !== undefined)
+      return Promise.resolve(this.meta);
+    return readFile(this.metaPath(), { encoding: "utf-8" }).then(text => {
+      return this.meta = JSON.parse(text);
+    });
   }
 
-  writeMeta(path, data) {
-    let metaPath = join(this.metaDir(), path);
-    let text = JSON.stringify(data);
-    return this.writeFileAtomic_(metaPath, text, { mode: this.config.fileMode });
+  writeMeta(meta) {
+    this.meta = meta;
   }
 
-  metaDir() {
+  metaPath() {
     return join(this.dir, "meta");
   }
 
