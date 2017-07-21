@@ -4,7 +4,6 @@ const stable = require("stable");
 const cloneDeep = require("lodash/cloneDeep");
 
 const { PTR, cloneNode } = require("./base");
-const { TransactionStore } = require("./transactionstore");
 
 const has = Array.prototype.hasOwnProperty;
 
@@ -64,7 +63,6 @@ class Tree {
       order: 1024,
     }, config);
     this.rootPtr = rootPtr;
-    this.tx = new TransactionStore(this.store, this.rootPtr);
   }
 
   static empty(store, config={}, TreeClass=Tree) {
@@ -74,16 +72,6 @@ class Tree {
     };
     store.write(root);
     return new TreeClass(store, root[PTR], config);
-  }
-
-  static open(store, name, TreeClass=Tree) {
-    return store.readMeta(name).then(meta => {
-      return new TreeClass(store, meta.rootPtr, meta.config);
-    });
-  }
-
-  clone(TreeClass=Tree) {
-    return new TreeClass(this.store, this.rootPtr, this.config);
   }
 
   /**
@@ -200,27 +188,6 @@ class Tree {
       return 0;
   }
 
-  atomically(fn, context) {
-    let oldTx = this.tx;
-    this.tx = new TransactionStore(oldTx, this.rootPtr);
-
-    try {
-      return Promise.resolve(fn.call(context)).then(result => {
-        this.tx.commit(this.rootPtr);
-        this.tx = oldTx;
-        return result;
-      }).catch(error => {
-        this.rootPtr = this.tx.rollback();
-        this.tx = oldTx;
-        throw error;      
-      });
-    } catch (error) {
-      this.rootPtr = this.tx.rollback();
-      this.oldTx = oldTx;
-      return Promise.reject(error);      
-    }
-  }
-
   /**
    * Inserts an entry into the tree, rejecting if the key is already present.
    * @param {*} key The key.
@@ -248,25 +215,29 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   set(key, value, type) {
-    return this.atomically(() => this.set_(key, value, type));
+    return this.set_(key, value, type);
   }
 
   set_(key, value, type) {
-    let dummyRoot = {
-      keys: [],
-      children: [this.rootPtr],
-    };
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
+    let rootPtr = this.rootPtr;
+    let dummyRoot = {
+      keys: [],
+      children: [rootPtr],
+    };
     this.rootPtr = undefined;
     return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue }) => {
       if (dummyRoot.children.length === 1) {
         this.rootPtr = dummyRoot.children[0];
       } else {
-        this.tx.write(node);
+        this.store.write(node);
         this.rootPtr = node[PTR];
       }
       return oldValue;
+    }).catch(error => {
+      this.rootPtr = rootPtr;
+      throw error;
     });
   }
 
@@ -274,7 +245,7 @@ class Tree {
     let { idx, equal } = this.findKey_(key, node);
 
     if (node.children) {
-      return this.tx.read(node.children[idx]).then(child => {
+      return this.store.read(node.children[idx]).then(child => {
         child = cloneNode(child);
         return this.setSubTree_(key, value, child, type);
       }).then(({ node: child, idx: childIdx, oldValue }) => {
@@ -303,12 +274,12 @@ class Tree {
 
           node.keys.splice(idx, 0, newKey);
 
-          this.tx.write(sibling);
+          this.store.write(sibling);
           node.children.splice(idx + 1, 0, sibling[PTR]);
         }
 
-        this.tx.write(child);
-        replaceChild(node.children, idx, child[PTR], this.tx);
+        this.store.write(child);
+        replaceChild(node.children, idx, child[PTR], this.store);
 
         return { node, idx, oldValue };
       });
@@ -335,7 +306,7 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   delete(key) {
-    return this.atomically(() => this.delete_(key));
+    return this.delete_(key);
   }
 
   delete_(key) {
@@ -343,7 +314,7 @@ class Tree {
       throw new Error("Operation in progress");
     let rootPtr = this.rootPtr;
     this.rootPtr = undefined;
-    return this.tx.read(rootPtr).then(node => {
+    return this.store.read(rootPtr).then(node => {
       node = cloneNode(node);
       return this.deleteSubTree_(key, node);
     }).then(({ node, idx, oldValue }) => {
@@ -353,11 +324,14 @@ class Tree {
         if (node.children && node.children.length === 1) {
           this.rootPtr = node.children[0];
         } else {
-          this.tx.write(node);
+          this.store.write(node);
           this.rootPtr = node[PTR];
         }
       }
       return oldValue;
+    }).catch(error => {
+      this.rootPtr = rootPtr;
+      throw error;
     });
   }
 
@@ -365,7 +339,7 @@ class Tree {
     let { idx, equal } = this.findKey_(key, node);
 
     if (node.children) {
-      return this.tx.read(node.children[idx]).then(child => {
+      return this.store.read(node.children[idx]).then(child => {
         child = cloneNode(child);
         return this.deleteSubTree_(key, child);
       }).then(({ node: child, idx: childIdx, oldValue }) => {
@@ -374,7 +348,7 @@ class Tree {
 
         if (nodeSize(child) < this.config.order) {
           let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
-          return this.tx.read(node.children[siblingIdx]).then(sibling => {
+          return this.store.read(node.children[siblingIdx]).then(sibling => {
             sibling = cloneNode(sibling);
 
             let child1, child2, push, pop, minIdx;
@@ -409,8 +383,8 @@ class Tree {
                 node.keys[minIdx] = child2.keys[0];
               }
 
-              this.tx.write(sibling);
-              replaceChild(node.children, siblingIdx, sibling[PTR], this.tx);
+              this.store.write(sibling);
+              replaceChild(node.children, siblingIdx, sibling[PTR], this.store);
             } else {
               // Child is too small and its sibling is not big enough to spare any keys so merge them.
               if (child.children) {
@@ -422,18 +396,18 @@ class Tree {
               }
 
               node.keys.splice(minIdx, 1);
-              replaceChild(node.children, siblingIdx, undefined, this.tx);
+              replaceChild(node.children, siblingIdx, undefined, this.store);
               node.children.splice(siblingIdx, 1);
             }
 
-            this.tx.write(child);
-            replaceChild(node.children, idx, child[PTR], this.tx);
+            this.store.write(child);
+            replaceChild(node.children, idx, child[PTR], this.store);
             return { node, idx, oldValue };
           });
         }
         
-        this.tx.write(child);
-        replaceChild(node.children, idx, child[PTR], this.tx);
+        this.store.write(child);
+        replaceChild(node.children, idx, child[PTR], this.store);
         return { node, idx, oldValue };
       });
     } else {
@@ -454,7 +428,7 @@ class Tree {
    * @returns {Promise} Resolves to the new tree.
    */
   bulk(items) {
-    return this.atomically(() => this.bulk_(items));
+    return this.bulk_(items);
   }
 
   bulk_(items) {
@@ -467,7 +441,7 @@ class Tree {
       if (item.length === 1)
         chain = chain.then(() => this.delete_(item[0]));
       else
-        chain = chain.then(() => this.set_(item[0], item[1], item[2]));
+        chain = chain.then(() => this.set_(item[0], item[1]));
     });
     return chain;
   }
@@ -509,7 +483,7 @@ class Tree {
   rangeEach(lower, upper, cb, context) {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
-    return this.tx.read(this.rootPtr).then(node => {
+    return this.store.read(this.rootPtr).then(node => {
       return this.rangeEach_(lower, upper, cb, context, node);
     });
   }
@@ -523,7 +497,7 @@ class Tree {
 
     if (node.children) {
       const processChildren = (node, i) => {
-        return this.tx.read(node.children[i]).then(child => {
+        return this.store.read(node.children[i]).then(child => {
           return this.rangeEach_(lower, upper, cb, context, child);
         }).then(result => {
           if (result == Tree.BREAK)
@@ -581,7 +555,7 @@ class Tree {
     if (!cb.call(context, this.rootPtr))
       return;
 
-    return this.tx.read(this.rootPtr).then(node => {
+    return this.store.read(this.rootPtr).then(node => {
       return this.mark_(cb, context, node);
     });
   }
@@ -596,7 +570,7 @@ class Tree {
       if (!cb.call(context, ptr))
         return;
 
-      return this.tx.read(node.children[i]).then(child => {
+      return this.store.read(node.children[i]).then(child => {
         return this.mark_(cb, context, child);
       }).then(result => {
         ++i;
@@ -607,24 +581,6 @@ class Tree {
     }
 
     return processChildren(node, 0);
-  }
-
-  commit(name) {
-    this.tx.commit(this.rootPtr);
-
-    if (name === undefined)
-      return this.store.flush();
-
-    return this.store.writeMeta(name, {
-      rootPtr: this.rootPtr,
-      config: this.config,
-    }).then(() => {
-      return this.store.flush();
-    });
-  }
-
-  rollback() {
-    this.rootPtr = this.tx.rollback();
   }
 }
 
