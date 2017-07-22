@@ -25,18 +25,6 @@ const writeFile = promisify(fs.writeFile);
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
-const tempDir = fs.mkdtempSync(join(os.tmpdir(), "filestore"));
-let tempCount = 0;
-
-const cleanup = () => {
-  let files = fs.readdirSync(tempDir);
-  files.forEach(file => {
-    console.error(`Deleting temporary file '${file}'.`);
-    fs.unlinkSync(join(tempDir, file));
-  });
-  fs.rmdirSync(tempDir);
-}
-
 const mkdirp = (path) => {
   return mkdir(path).catch(error => {
     if (error.code === "EEXIST")
@@ -55,8 +43,13 @@ const mkdirp = (path) => {
 }
 
 const rmrf = (path) => {
-  return lstat(path).then(stats => {
-    if (stats.isDirectory()) {
+  return lstat(path).catch(error => {
+    if (error.code !== "ENOENT")
+      throw error;
+  }).then(stats => {
+    if (stats === undefined) {
+      return;
+    } else if (stats.isDirectory()) {
       return readdir(path).then(entries => {
         let idx = -1;
         const processEntries = () => {
@@ -75,9 +68,6 @@ const rmrf = (path) => {
   });
 
 }
-
-process.on("exit", cleanup);
-process.on("SIGINT", cleanup);
 
 class Ptr {
   constructor(store, node) {
@@ -105,7 +95,13 @@ class Ptr {
 
 class FileStore {
   static create(dir, config) {
-    return Promise.resolve(new FileStore(dir, config));
+    return mkdirp(join(dir, "node")).then(() => {
+      return rmrf(join(dir, "tmp"));
+    }).then(() => {
+      return mkdirp(join(dir, "tmp"));
+    }).then(() => {
+      return new FileStore(dir, config);
+    });
   }
 
   constructor(dir, config) {
@@ -126,6 +122,7 @@ class FileStore {
     this.writes = new Set();
     this.cache = new Map();
     this.meta = undefined;
+    this.tmpCount = 0;
   }
   
   invalidate_() {
@@ -268,14 +265,9 @@ class FileStore {
     });
   }
   
-  cloneStore(prefix="clone-") {
-    let clonesDir = join(this.dir, "tmp");
-    return mkdir(clonesDir).catch(error => {
-      if (error.code !== "EEXIST")
-        throw error;
-    }).then(() => {
-      return mkdtemp(join(clonesDir, prefix));
-    }).then(newDir => {
+  cloneStore() {
+    let newDir = this.tmpPath_();
+    return FileStore.create(newDir, this.config).then(newStore => {
       return this.flush().then(() => {
         return readdir(join(this.dir, "node")).catch(error => {
           if (error.code !== "ENOENT")
@@ -313,9 +305,8 @@ class FileStore {
         }
 
         return processNodes().then(() => {
-          let store = new FileStore(newDir, this.config);
-          store.writeMeta(this.meta);
-          return store;
+          newStore.writeMeta(this.meta);
+          return newStore;
         });
       });
     });
@@ -409,23 +400,28 @@ class FileStore {
   writeFileAtomic_(path, data, options) {
     options = Object.assign({}, options, { flags: "wx" });
 
-    let tempPath = join(tempDir, tempCount.toString(36));
-    ++tempCount;
-    return writeFile(tempPath, data, options).then(() => {
-      return rename(tempPath, path).catch(error => {
+    let tmpPath = this.tmpPath_();
+    return writeFile(tmpPath, data, options).then(() => {
+      return rename(tmpPath, path).catch(error => {
         if (error.code !== "ENOENT")
           throw error;
         return mkdirp(dirname(path)).then(() => {
-          return rename(tempPath, path);
+          return rename(tmpPath, path);
         });
       }).catch(error => {
-        return unlink(tempPath).catch(() => {
+        return unlink(tmpPath).catch(() => {
           throw error;
         }).then(() => {
           throw error;
         });
       });
     });
+  }
+
+  tmpPath_() {
+    let tmpPath = join(this.dir, "tmp", this.tmpCount.toString(36));
+    ++this.tmpCount;
+    return tmpPath;
   }
 }
 

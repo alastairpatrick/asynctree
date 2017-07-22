@@ -251,9 +251,11 @@ describe("FileStore", function() {
   });
 
   it("exception if file mode does not allow read and write access to user", function() {
-    expect(() => {
-      FileStore.create(TEMP_DIR, { fileMode: 0o444 });
-    }).to.throw(/access/);
+    return FileStore.create(TEMP_DIR, { fileMode: 0o444 }).then(() => {
+      expect.fail("Did not throw");
+    }).catch(error => {
+      expect(error).to.match(/access/);
+    });
   });
 
   it("cloned store initially held within source store directory", function() {
