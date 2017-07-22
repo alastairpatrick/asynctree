@@ -46,7 +46,7 @@ const serializeTree = (store, ptr) => {
 }
 
 const testStoreFactory = () => {
-  return new TestStore();
+  return Promise.resolve(new TestStore());
 }
 
 testStoreFactory.after = (store) => {
@@ -55,7 +55,7 @@ testStoreFactory.after = (store) => {
 
 const fileStoreFactory = () => {
   sh.mkdir("-p", TEMP_DIR);
-  return new FileStore(TEMP_DIR);
+  return FileStore.create(TEMP_DIR);
 }
 
 fileStoreFactory.after = (store) => {
@@ -68,13 +68,15 @@ fileStoreFactory.after = (store) => {
   describe("Tree", function() {
     beforeEach(function() {
       this.sandbox = sinon.sandbox.create();
-      this.store = factory();
-      let emptyNode = {
-        keys: [],
-        values: [],
-      };
-      this.store.write(emptyNode);
-      this.emptyNodePtr = emptyNode[PTR];
+      return factory().then(store => {
+        this.store = store;
+        let emptyNode = {
+          keys: [],
+          values: [],
+        };
+        this.store.write(emptyNode);
+        this.emptyNodePtr = emptyNode[PTR];
+      });
     })
 
     afterEach(function() {

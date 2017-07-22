@@ -104,6 +104,10 @@ class Ptr {
 }
 
 class FileStore {
+  static create(dir, config) {
+    return Promise.resolve(new FileStore(dir, config));
+  }
+
   constructor(dir, config) {
     config = Object.assign({
       cacheSize: 256,

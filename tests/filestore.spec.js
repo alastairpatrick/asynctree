@@ -33,14 +33,17 @@ describe("FileStore", function() {
     sh.mkdir("-p", TEMP_DIR);
     sh.rm("-rf", join(TEMP_DIR, "*"));
 
-    this.store = new FileStore(TEMP_DIR, {
+    return FileStore.create(TEMP_DIR, {
       cacheSize: Infinity,
       compress: false,
-    });
-
-    this.store2 = new FileStore(TEMP_DIR, {
-      cacheSize: Infinity,
-      compress: false,
+    }).then(store => {
+      return FileStore.create(TEMP_DIR, {
+        cacheSize: Infinity,
+        compress: false,
+      }).then(store2 => {
+        this.store = store;
+        this.store2 = store2;
+      });
     });
   })
 
@@ -249,7 +252,7 @@ describe("FileStore", function() {
 
   it("exception if file mode does not allow read and write access to user", function() {
     expect(() => {
-      new FileStore(TEMP_DIR, { fileMode: 0o444 });
+      FileStore.create(TEMP_DIR, { fileMode: 0o444 });
     }).to.throw(/access/);
   });
 
