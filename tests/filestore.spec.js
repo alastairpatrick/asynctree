@@ -86,8 +86,8 @@ describe("FileStore", function() {
     };
     this.store.write(parentNode);
     return this.store.flush().then(() => {
-      expect(existsSync(join(TEMP_DIR, "f0/acd7edc9c4c24a1351b80e68e6d830"))).to.be.true;
-      expect(existsSync(join(TEMP_DIR, this.ptr1))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", "f0/acd7edc9c4c24a1351b80e68e6d830"))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.true;
     });
   })
 
@@ -100,7 +100,7 @@ describe("FileStore", function() {
     this.store.write(parentNode);
     this.store.delete(parentNode[PTR]);
     return this.store.flush().then(() => {
-      expect(existsSync(join(TEMP_DIR, this.ptr1))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.true;
     });
   })
 
@@ -108,9 +108,9 @@ describe("FileStore", function() {
     this.store.config.cacheSize = 1;
     this.store.write(this.node1);
     this.store.write(this.node2);  // evicts node1
-    let path = join(TEMP_DIR, this.ptr1);
+    let path = join(TEMP_DIR, "node", this.ptr1);
     return this.store.pathTasks.get(path).promise.then(() => {
-      expect(readdirSync(TEMP_DIR)).to.deep.equal([this.dir1]);
+      expect(readdirSync(join(TEMP_DIR, "node"))).to.deep.equal([this.dir1]);
       expect(existsSync(path)).to.be.true;
     });
   })
@@ -119,7 +119,7 @@ describe("FileStore", function() {
     this.store.config.cacheSize = 1;
     this.store.write(this.node1);
     this.store.write(this.node2);  // evicts node1
-    let path = join(TEMP_DIR, this.ptr1);
+    let path = join(TEMP_DIR, "node", this.ptr1);
     return this.store.pathTasks.get(path).promise.then(() => {
       expect(existsSync(path)).to.be.true;
       
@@ -134,7 +134,7 @@ describe("FileStore", function() {
     this.store.config.cacheSize = 1;
     this.store.write(this.node1);
     this.store.write(this.node2);  // evicts node1
-    let path = join(TEMP_DIR, this.ptr1);
+    let path = join(TEMP_DIR, "node", this.ptr1);
     return this.store.pathTasks.get(path).promise.then(() => {
       expect(existsSync(path)).to.be.true;
       
@@ -218,7 +218,7 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     return this.store.sync().then(() => {
       // Corrupt the node file
-      writeFileSync(join(TEMP_DIR, String(this.ptr1)), "!");
+      writeFileSync(join(TEMP_DIR, "node", String(this.ptr1)), "!");
 
       return this.store.read(this.ptr1).then(() => {
         expect.fail("Did not throw");
@@ -252,4 +252,62 @@ describe("FileStore", function() {
       new FileStore(TEMP_DIR, { fileMode: 0o444 });
     }).to.throw(/access/);
   });
+
+  it("cloned store initially held within source store directory", function() {
+    return this.store.cloneStore().then(clone => {
+      expect(dirname(clone.dir)).to.equal(join(TEMP_DIR, "tmp"));
+      expect(statSync(clone.dir).isDirectory()).to.be.true;
+    });
+  })
+
+  it("clones store", function() {
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    this.store.writeMeta({
+      hello: "there",
+    });
+    return this.store.cloneStore().then(clone => {
+      return clone.readMeta().then(meta => {
+        return clone.read(this.ptr1).then(node1 => {
+          return clone.read(this.ptr2).then(node2 => {
+            expect(meta).to.deep.equal({
+              hello: "there",
+            });
+            expect(node1).to.deep.equal(this.node1);
+            expect(node2).to.deep.equal(this.node2);
+            return clone.flush();
+          });
+        });
+      });
+    });
+  })
+
+  it("renames cloned store", function() {
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    this.store.writeMeta({
+      hello: "there",
+    });
+    return this.store.cloneStore().then(clone => {
+      return clone.renameStore(join(TEMP_DIR, "tmp", "foo")).then(() => {
+        expect(clone.dir).to.equal(join(TEMP_DIR, "tmp", "foo"));
+        expect(statSync(clone.dir).isDirectory()).to.be.true;
+      });
+    });
+  })
+
+  it("deletes cloned store", function() {
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    this.store.writeMeta({
+      hello: "there",
+    });
+    return this.store.cloneStore().then(clone => {
+      let cloneDir = clone.dir;
+      return clone.deleteStore().then(() => {
+        expect(clone.dir).to.be.undefined;
+        expect(existsSync(cloneDir)).to.be.false;
+      });
+    });
+  })
 })

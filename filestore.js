@@ -3,7 +3,7 @@
 const { createHash } = require("crypto");
 const fs = require("fs");
 const os = require("os");
-const { dirname, join } = require("path");
+const { dirname, join, resolve } = require("path");
 const zlib = require("zlib");
 
 const { promisify } = require("./promisify");
@@ -11,9 +11,14 @@ const { PTR } = require("./tree");
 
 const has = Object.prototype.hasOwnProperty;
 
+const link = promisify(fs.link);
+const lstat = promisify(fs.lstat);
+const mkdtemp = promisify(fs.mkdtemp);
 const mkdir = promisify(fs.mkdir);
+const readdir = promisify(fs.readdir);
 const readFile = promisify(fs.readFile);
 const rename = promisify(fs.rename);
+const rmdir = promisify(fs.rmdir);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
 
@@ -30,6 +35,45 @@ const cleanup = () => {
     fs.unlinkSync(join(tempDir, file));
   });
   fs.rmdirSync(tempDir);
+}
+
+const mkdirp = (path) => {
+  return mkdir(path).catch(error => {
+    if (error.code === "EEXIST")
+      return;
+    if (error.code !== "ENOENT")
+      throw error;
+    path = resolve(path);
+    let parent = dirname(path);
+    return mkdirp(parent).then(() => {
+      return mkdir(path).catch(error => {
+        if (error.code !== "EEXIST")
+          throw error;
+      });
+    });
+  });
+}
+
+const rmrf = (path) => {
+  return lstat(path).then(stats => {
+    if (stats.isDirectory()) {
+      return readdir(path).then(entries => {
+        let idx = -1;
+        const processEntries = () => {
+          if (++idx >= entries.length)
+            return;
+          let entry = entries[idx];
+          return rmrf(join(path, entry)).then(processEntries);
+        }
+        return processEntries()
+      }).then(() => {
+        return rmdir(path);
+      });
+    } else {
+      return unlink(path);
+    }
+  });
+
 }
 
 process.on("exit", cleanup);
@@ -80,6 +124,15 @@ class FileStore {
     this.meta = undefined;
   }
   
+  invalidate_() {
+    this.dir = undefined;
+    this.config = undefined;
+    this.pathTasks = undefined;
+    this.writes = undefined;
+    this.cache = undefined;
+    this.meta = undefined;
+  }
+
   createHasher() {
     // Not intended to be resilient to deliberate collisions attempts. When that's an issue, override
     // this function to use another hash function or HMAC.
@@ -211,6 +264,73 @@ class FileStore {
     });
   }
   
+  cloneStore(prefix="clone-") {
+    let clonesDir = join(this.dir, "tmp");
+    return mkdir(clonesDir).catch(error => {
+      if (error.code !== "EEXIST")
+        throw error;
+    }).then(() => {
+      return mkdtemp(join(clonesDir, prefix));
+    }).then(newDir => {
+      return this.flush().then(() => {
+        return readdir(join(this.dir, "node")).catch(error => {
+          if (error.code !== "ENOENT")
+            throw error;
+          return [];
+        });
+      }).then(prefixes => {
+        let prefixIdx = -1;
+        const processNodes = () => {
+          let promise = Promise.resolve();
+          if (++prefixIdx >= prefixes.length)
+            return promise;
+          
+          let file = prefixes[prefixIdx];
+          if (/^[a-z0-9]{2}$/.test(file)) {
+            promise = promise.then(() =>{
+              return mkdirp(join(newDir, "node", file));
+            }).then(() => {
+              return readdir(join(this.dir, "node", file));
+            }).then(nodes => {
+              let nodeIdx = -1;
+              const proocessSubDir = () => {
+                if (++nodeIdx >= nodes.length)
+                  return;
+                
+                let node = nodes[nodeIdx];
+                return link(join(this.dir, "node", file, node), join(newDir, "node", file, node)).then(proocessSubDir);
+              }
+
+              return proocessSubDir();
+            });
+          }
+
+          return promise.then(processNodes);
+        }
+
+        return processNodes().then(() => {
+          let store = new FileStore(newDir, this.config);
+          store.writeMeta(this.meta);
+          return store;
+        });
+      });
+    });
+  }
+
+  renameStore(dir) {
+    let oldDir = this.dir;
+    this.dir = undefined;
+    return rename(oldDir, dir).then(() => {
+      this.dir = dir;
+    });
+  }
+
+  deleteStore() {
+    let dir = this.dir;
+    this.invalidate_();
+    return rmrf(dir);
+  }
+
   schedulePathTask_(path, task) {
     let pathTask = this.pathTasks.get(path);
     if (pathTask === undefined) {
@@ -238,7 +358,7 @@ class FileStore {
       path = ptr;
     else
       path = ptr.toJSON();
-    path = join(this.dir, path);
+    path = join(this.dir, "node", path);
     if (this.config.compress)
       path += ".gz";
     return path;
@@ -291,11 +411,7 @@ class FileStore {
       return rename(tempPath, path).catch(error => {
         if (error.code !== "ENOENT")
           throw error;
-
-        return mkdir(dirname(path)).catch(mkdirError => {
-          if (mkdirError.code !== "EEXIST")
-            throw error;
-        }).then(() => {
+        return mkdirp(dirname(path)).then(() => {
           return rename(tempPath, path);
         });
       }).catch(error => {
