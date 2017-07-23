@@ -978,7 +978,7 @@ fileStoreFactory.after = (store) => {
       })
     })
 
-    describe("garbage collect", function() {
+    describe("mark", function() {
       it("iterates over all pointers", function() {
         let results = [];
         return deserializeTree(this.store, {
@@ -1009,10 +1009,48 @@ fileStoreFactory.after = (store) => {
           let tree = new Tree(this.store, ptr);
           return tree.mark(ptr => {
             results.push(ptr);
-            return true;
           });
-        }).then(() => {
+        }).then(height => {
+          expect(height).to.equal(3);
           expect(results.length).to.equal(8);
+        });
+      })
+
+      it("skips nodes if callback returns true", function() {
+        let results = [];
+        return deserializeTree(this.store, {
+          keys: [13],
+          children: [{
+            keys: [9, 11],
+            children: [{
+              keys: [1, 4],
+              values: [1, 4],
+            }, {
+              keys: [9, 10],
+              values: [9, 10],
+            }, {
+              keys: [11, 12],
+              values: [11, 12],
+            }],
+          }, {
+            keys: [16],
+            children: [{
+              keys: [13, 15],
+              values: [13, 15],
+            }, {
+              keys: [16, 20, 25],
+              values: [16, 20, 25],
+            }],
+          }],
+        }).then(ptr => {
+          let tree = new Tree(this.store, ptr);
+          return tree.mark((ptr, depth) => {
+            results.push(ptr);
+            return depth > 0;
+          });
+        }).then(height => {
+          expect(height).to.be.undefined;
+          expect(results.length).to.equal(3);
         });
       })
     })

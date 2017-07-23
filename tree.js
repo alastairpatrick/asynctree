@@ -586,35 +586,49 @@ class Tree {
   }
 
   mark(cb, context) {
-    if (!cb.call(context, this.rootPtr))
+    if (cb.call(context, this.rootPtr, 0))
       return;
 
     return this.store.read(this.rootPtr).then(node => {
-      return this.mark_(cb, context, node);
+      return this.mark_(cb, context, node, 0, undefined);
     });
   }
 
-  mark_(cb, context, node) {
-    // This could be optimized by not unnecessarily reading leaf nodes in the first place.
+  mark_(cb, context, node, depth, height) {
+    ++depth;
     if (!node.children)
-      return;
+      return depth;
 
-    const processChildren = (node, i) => {
-      let ptr = node.children[i];
-      if (!cb.call(context, ptr))
-        return;
+    if (depth + 1 === height) {
+      // Optimization: read one leaf node to determine height of tree. Thereafter, all nodes at this depth are
+      // leaf nodes so the expense of reading them is avoided, since they do not contain any pointers.
+      node.children.forEach(ptr => cb.call(context, ptr, depth));
+      return height;
+    } else {
+      const processChildren = (node, i) => {
+        let promise;
+        let ptr = node.children[i];
+        if (cb.call(context, ptr, depth)) {
+          promise = Promise.resolve(height);
+        } else {
+          promise = this.store.read(ptr).then(child => {
+            return this.mark_(cb, context, child, depth, height);
+          })
+        }
+        
+        return promise.then(h => {
+          if (height === undefined)
+            height = h;
 
-      return this.store.read(node.children[i]).then(child => {
-        return this.mark_(cb, context, child);
-      }).then(result => {
-        ++i;
-        if (i >= node.children.length)
-          return;
-        return processChildren(node, i);
-      });
+          ++i;
+          if (i >= node.children.length)
+            return height;
+          return processChildren(node, i);
+        });
+      }
+
+      return processChildren(node, 0);
     }
-
-    return processChildren(node, 0);
   }
 }
 
