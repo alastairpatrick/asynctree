@@ -331,53 +331,6 @@ class FileStore {
     });
   }
   
-  cloneStore() {
-    let newDir = this.tmpPath_();
-    return FileStore.create(newDir, this.config).then(newStore => {
-      return this.flush().then(() => {
-        return readdir(join(this.dir, "node")).catch(error => {
-          if (error.code !== "ENOENT")
-            throw error;
-          return [];
-        });
-      }).then(prefixes => {
-        let prefixIdx = -1;
-        const processNodes = () => {
-          let promise = Promise.resolve();
-          if (++prefixIdx >= prefixes.length)
-            return promise;
-          
-          let file = prefixes[prefixIdx];
-          if (/^[a-z0-9]{2}$/.test(file)) {
-            promise = promise.then(() =>{
-              return mkdirp(join(newDir, "node", file));
-            }).then(() => {
-              return readdir(join(this.dir, "node", file));
-            }).then(nodes => {
-              let nodeIdx = -1;
-              const proocessSubDir = () => {
-                if (++nodeIdx >= nodes.length)
-                  return;
-                
-                let node = nodes[nodeIdx];
-                return link(join(this.dir, "node", file, node), join(newDir, "node", file, node)).then(proocessSubDir);
-              }
-
-              return proocessSubDir();
-            });
-          }
-
-          return promise.then(processNodes);
-        }
-
-        return processNodes().then(() => {
-          newStore.writeMeta(this.meta);
-          return newStore;
-        });
-      });
-    });
-  }
-
   renameStore(dir) {
     let oldDir = this.dir;
     this.dir = undefined;

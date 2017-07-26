@@ -237,9 +237,9 @@ describe("FileStore", function() {
       compress: false,
     }).then(store2 => {
       store2.write(this.node1);
-      return this.store.copy(store2, this.ptr1);
-    }).then(() => {
-      return this.store.copy(store2, this.ptr1); // second time to test overwriting
+      return this.store.copy(store2, this.ptr1).then(() => {
+        return this.store.copy(store2, this.ptr1); // second time to test overwriting
+      });
     }).then(() => {
       return this.store.read(this.ptr1);
     }).then(node => {
@@ -253,9 +253,9 @@ describe("FileStore", function() {
       compress: false,
     }).then(store2 => {
       store2.write(this.node1);
-      return this.store.copy(store2, this.ptr1, { tryLink: false });
-    }).then(() => {
-      return this.store.copy(store2, this.ptr1, { tryLink: false }); // second time to test overwriting
+      return this.store.copy(store2, this.ptr1, { tryLink: false }).then(() => {
+        return this.store.copy(store2, this.ptr1, { tryLink: false }); // second time to test overwriting
+      });
     }).then(() => {
       return this.store.read(this.ptr1);
     }).then(node => {
@@ -265,8 +265,7 @@ describe("FileStore", function() {
   
   it("touches node", function() {
     this.store.write(this.node1);
-    return this.store.copy(this.store, this.ptr1, { touch: true });
-    }).then(() => {
+    return this.store.copy(this.store, this.ptr1, { touch: true }).then(() => {
       return this.store.read(this.ptr1);
     }).then(node => {
       expect(node).to.deep.equal(this.node1);
@@ -299,62 +298,4 @@ describe("FileStore", function() {
       expect(error).to.match(/access/);
     });
   });
-
-  it("cloned store initially held within source store directory", function() {
-    return this.store.cloneStore().then(clone => {
-      expect(dirname(clone.dir)).to.equal(join(TEMP_DIR, "tmp"));
-      expect(statSync(clone.dir).isDirectory()).to.be.true;
-    });
-  })
-
-  it("clones store", function() {
-    this.store.write(this.node1);
-    this.store.write(this.node2);
-    this.store.writeMeta({
-      hello: "there",
-    });
-    return this.store.cloneStore().then(clone => {
-      return clone.readMeta().then(meta => {
-        return clone.read(this.ptr1).then(node1 => {
-          return clone.read(this.ptr2).then(node2 => {
-            expect(meta).to.deep.equal({
-              hello: "there",
-            });
-            expect(node1).to.deep.equal(this.node1);
-            expect(node2).to.deep.equal(this.node2);
-            return clone.flush();
-          });
-        });
-      });
-    });
-  })
-
-  it("renames cloned store", function() {
-    this.store.write(this.node1);
-    this.store.write(this.node2);
-    this.store.writeMeta({
-      hello: "there",
-    });
-    return this.store.cloneStore().then(clone => {
-      return clone.renameStore(join(TEMP_DIR, "tmp", "foo")).then(() => {
-        expect(clone.dir).to.equal(join(TEMP_DIR, "tmp", "foo"));
-        expect(statSync(clone.dir).isDirectory()).to.be.true;
-      });
-    });
-  })
-
-  it("deletes cloned store", function() {
-    this.store.write(this.node1);
-    this.store.write(this.node2);
-    this.store.writeMeta({
-      hello: "there",
-    });
-    return this.store.cloneStore().then(clone => {
-      let cloneDir = clone.dir;
-      return clone.deleteStore().then(() => {
-        expect(clone.dir).to.be.undefined;
-        expect(existsSync(cloneDir)).to.be.false;
-      });
-    });
-  })
 })
