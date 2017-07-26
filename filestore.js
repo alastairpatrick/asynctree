@@ -42,33 +42,6 @@ const mkdirp = (path) => {
   });
 }
 
-const rmrf = (path) => {
-  return lstat(path).catch(error => {
-    if (error.code !== "ENOENT")
-      throw error;
-  }).then(stats => {
-    if (stats === undefined) {
-      return;
-    } else if (stats.isDirectory()) {
-      return readdir(path).then(entries => {
-        let idx = -1;
-        const processEntries = () => {
-          if (++idx >= entries.length)
-            return;
-          let entry = entries[idx];
-          return rmrf(join(path, entry)).then(processEntries);
-        }
-        return processEntries()
-      }).then(() => {
-        return rmdir(path);
-      });
-    } else {
-      return unlink(path);
-    }
-  });
-
-}
-
 class Ptr {
   constructor(store, node) {
     this.store = store;
@@ -96,8 +69,6 @@ class Ptr {
 class FileStore {
   static create(dir, config) {
     return mkdirp(join(dir, "node")).then(() => {
-      return rmrf(join(dir, "tmp"));
-    }).then(() => {
       return mkdirp(join(dir, "tmp"));
     }).then(() => {
       return new FileStore(dir, config);
@@ -331,20 +302,6 @@ class FileStore {
     });
   }
   
-  renameStore(dir) {
-    let oldDir = this.dir;
-    this.dir = undefined;
-    return rename(oldDir, dir).then(() => {
-      this.dir = dir;
-    });
-  }
-
-  deleteStore() {
-    let dir = this.dir;
-    this.invalidate_();
-    return rmrf(dir);
-  }
-
   schedulePathTask_(path, task) {
     let pathTask = this.pathTasks.get(path);
     if (pathTask === undefined) {
