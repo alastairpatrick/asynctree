@@ -74,6 +74,23 @@ class Tree {
     return new TreeClass(store, root[PTR], config);
   }
 
+  clone(options) {
+    options = Object.assign({
+      store: this.store,
+      touch: false,
+      tryLink: true,
+    }, options);
+
+    let promise = Promise.resolve();
+    if (options.store !== this.store || options.touch) {
+      promise = promise.then(() => this.forEachPtr(ptr => {
+        return options.store.copy(this.store, ptr, options).then(modified => !modified);
+      }));
+    }
+
+    return promise.then(() => new (this.constructor)(options.store, this.rootPtr, this.config));
+  }
+
   /**
    * Compare a pair of keys. When keys are of different types, the order is
    * boolean < number < string < array < object < null.
@@ -585,50 +602,46 @@ class Tree {
     return { idx: high, equal };
   }
 
-  mark(cb, context) {
-    if (cb.call(context, this.rootPtr, 0))
-      return;
+  forEachPtr(cb, context) {
+    return Promise.resolve(cb.call(context, this.rootPtr, 0)).then(skip => {
+      if (skip)
+        return undefined;
 
-    return this.store.read(this.rootPtr).then(node => {
-      return this.mark_(cb, context, node, 0, undefined);
+      return this.store.read(this.rootPtr).then(node => {
+        return this.forEachPtr_(cb, context, node, 0, undefined);
+      });
     });
   }
 
-  mark_(cb, context, node, depth, height) {
+  forEachPtr_(cb, context, node, depth, height) {
     ++depth;
     if (!node.children)
       return depth;
 
-    if (depth + 1 === height) {
-      // Optimization: read one leaf node to determine height of tree. Thereafter, all nodes at this depth are
-      // leaf nodes so the expense of reading them is avoided, since they do not contain any pointers.
-      node.children.forEach(ptr => cb.call(context, ptr, depth));
-      return height;
-    } else {
-      const processChildren = (node, i) => {
-        let promise;
-        let ptr = node.children[i];
-        if (cb.call(context, ptr, depth)) {
-          promise = Promise.resolve(height);
+    const processChildren = (node, i) => {
+      let ptr = node.children[i];
+      return Promise.resolve(cb.call(context, ptr, depth)).then(skip => {
+        // Optimization: read one leaf node to determine height of tree. Thereafter, all nodes at this depth are
+        // leaf nodes so the expense of reading them is avoided, since they do not contain any pointers.
+        if (skip || depth + 1 === height) {
+          return height;
         } else {
-          promise = this.store.read(ptr).then(child => {
-            return this.mark_(cb, context, child, depth, height);
+          return this.store.read(ptr).then(child => {
+            return this.forEachPtr_(cb, context, child, depth, height);
           })
         }
-        
-        return promise.then(h => {
-          if (height === undefined)
-            height = h;
+      }).then(h => {
+        if (height === undefined)
+          height = h;
 
-          ++i;
-          if (i >= node.children.length)
-            return height;
-          return processChildren(node, i);
-        });
-      }
-
-      return processChildren(node, 0);
+        ++i;
+        if (i >= node.children.length)
+          return height;
+        return processChildren(node, i);
+      });
     }
+
+    return processChildren(node, 0);
   }
 }
 

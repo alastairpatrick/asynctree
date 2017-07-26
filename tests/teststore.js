@@ -1,6 +1,6 @@
 "use strict";
 
-const { PTR } = require("..");
+const { PTR, cloneNode } = require("..");
 
 const has = Object.prototype.hasOwnProperty;
 
@@ -31,6 +31,14 @@ class TestStore {
       return Promise.reject(new Error(`Pointer not found '${ptr}'.`));
     let node = this.nodes[ptr];
     delete this.nodes[ptr];
+  }
+
+  copy(fromStore, ptr) {
+    return fromStore.read(ptr).then(node => {
+      this.nodes[ptr] = cloneNode(node);
+      this.ptr = Math.max(this.ptr, ptr + 1);
+      return true;
+    });
   }
 
   readMeta() {

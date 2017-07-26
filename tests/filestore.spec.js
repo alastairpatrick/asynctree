@@ -230,6 +230,48 @@ describe("FileStore", function() {
       });
     });
   })
+  
+  it("links node from other store", function() {
+    return FileStore.create(join(TEMP_DIR, "store2"), {
+      cacheSize: Infinity,
+      compress: false,
+    }).then(store2 => {
+      store2.write(this.node1);
+      return this.store.copy(store2, this.ptr1);
+    }).then(() => {
+      return this.store.copy(store2, this.ptr1); // second time to test overwriting
+    }).then(() => {
+      return this.store.read(this.ptr1);
+    }).then(node => {
+      expect(node).to.deep.equal(this.node1);
+    });
+  })
+  
+  it("copies node from other store", function() {
+    return FileStore.create(join(TEMP_DIR, "store2"), {
+      cacheSize: Infinity,
+      compress: false,
+    }).then(store2 => {
+      store2.write(this.node1);
+      return this.store.copy(store2, this.ptr1, { tryLink: false });
+    }).then(() => {
+      return this.store.copy(store2, this.ptr1, { tryLink: false }); // second time to test overwriting
+    }).then(() => {
+      return this.store.read(this.ptr1);
+    }).then(node => {
+      expect(node).to.deep.equal(this.node1);
+    });
+  })
+  
+  it("touches node", function() {
+    this.store.write(this.node1);
+    return this.store.copy(this.store, this.ptr1, { touch: true });
+    }).then(() => {
+      return this.store.read(this.ptr1);
+    }).then(node => {
+      expect(node).to.deep.equal(this.node1);
+    });
+  })
 
   it("returns meta path", function() {
     expect(this.store.metaPath()).to.equal(join(TEMP_DIR, "meta"));

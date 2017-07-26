@@ -53,9 +53,9 @@ testStoreFactory.after = (store) => {
   return Promise.resolve();
 }
 
-const fileStoreFactory = () => {
-  sh.mkdir("-p", TEMP_DIR);
-  return FileStore.create(TEMP_DIR);
+const fileStoreFactory = (path=TEMP_DIR) => {
+  sh.mkdir("-p", path);
+  return FileStore.create(path);
 }
 
 fileStoreFactory.after = (store) => {
@@ -138,6 +138,48 @@ fileStoreFactory.after = (store) => {
           });
         });
       })
+
+      it("can clone tree, touching all target nodes", function() {
+        let tree = Tree.empty(this.store);
+        return tree.insert(1, 10).then(() => {
+          return tree.clone({
+            touch: true,
+          });
+        }).then(clone => {
+          return clone.get(1);
+        }).then(value => {
+          expect(value).to.equal(10);
+        });
+      });
+
+      it("can clone tree to new store", function() {
+        let tree = Tree.empty(this.store);
+        return factory(join(TEMP_DIR, "store2")).then(store2 => {
+          return tree.insert(1, 10).then(() => {
+            return tree.clone({ store: store2 });
+          }).then(clone => {
+              return clone.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+          });
+        });
+      });
+
+      it("can clone tree to new store without linking nodes", function() {
+        let tree = Tree.empty(this.store);
+        return factory(join(TEMP_DIR, "store2")).then(store2 => {
+          return tree.insert(1, 10).then(() => {
+            return tree.clone({
+              store: store2,
+              tryLink: false,
+            });
+          }).then(clone => {
+              return clone.get(1);
+          }).then(value => {
+            expect(value).to.equal(10);
+          });
+        });
+      });
     })
 
     describe("set", function() {
@@ -978,7 +1020,7 @@ fileStoreFactory.after = (store) => {
       })
     })
 
-    describe("mark", function() {
+    describe("forEachPtr", function() {
       it("iterates over all pointers", function() {
         let results = [];
         return deserializeTree(this.store, {
@@ -1007,7 +1049,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr);
-          return tree.mark(ptr => {
+          return tree.forEachPtr(ptr => {
             results.push(ptr);
           });
         }).then(height => {
@@ -1044,7 +1086,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, ptr);
-          return tree.mark((ptr, depth) => {
+          return tree.forEachPtr((ptr, depth) => {
             results.push(ptr);
             return depth > 0;
           });

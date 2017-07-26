@@ -209,7 +209,6 @@ class FileStore {
       if (this.writes.size <= this.config.cacheSize)
         break;
       this.writeNodeFile_(evictNode);
-      this.writes.delete(evictNode);
     }
   }
   
@@ -228,6 +227,70 @@ class FileStore {
     ptr.hash = undefined;
   }
 
+  copy(fromStore, ptr, options) {
+    options = Object.assign({
+      tryLink: true,
+      touch: false,
+    }, options);
+
+    let fromPath = fromStore.ptrPath_(ptr);
+    let toPath = this.ptrPath_(ptr);
+
+    const touch = () => {
+      let tempPath = this.tmpPath_();
+      return link(toPath, tempPath).then(() => {
+        return unlink(tempPath);
+      }).then(() => true);
+    }
+
+    const doCopy = () => {
+      return readFile(fromPath).then(buf => {
+        return writeFile(toPath, buf).then(() => true);
+      });
+    }
+
+    const doLink = () => {
+      if (options.touch) {
+        let tempPath = this.tmpPath_();
+        return link(fromPath, tempPath).then(() => {
+          return rename(tempPath, toPath);
+        }).then(() => true);
+      } else {
+        return link(fromPath, toPath).then(() => true).catch(error => {
+          if (error.code !== "EEXIST")
+            throw error;
+          return false;
+        });
+      }
+    }
+
+    const retry = (fn) => {
+      return fn().catch(error => {
+        if (error.code !== "ENOENT")
+          throw error;
+        return mkdirp(dirname(toPath)).then(fn);
+      });
+    }
+
+    return fromStore.flushWriteNodes().then(() => {
+      return this.schedulePathTask_(toPath, () => {
+        if (fromStore === this) {
+          if (options.touch) {
+            return touch();
+          }
+        } else {
+          if (options.tryLink) {
+            return retry(doLink).catch(() => {
+              return retry(doCopy);
+            });
+          } else {
+            return retry(doCopy);
+          }
+        }
+      });
+    });
+  }
+
   metaPath() {
     return join(this.dir, "meta");
   }
@@ -244,16 +307,19 @@ class FileStore {
     this.meta = meta;
   }
 
-  flush() {
-    for (let node of this.writes) {
+  flushWriteNodes() {
+    for (let node of this.writes)
       this.writeNodeFile_(node);
-    }
 
     let promises = [];
     for (let task of this.pathTasks.values())
       promises.push(task.promise);
     
-    return Promise.all(promises).then(() => {
+    return Promise.all(promises);
+  }
+
+  flush() {
+    return this.flushWriteNodes().then(() => {
       let text = JSON.stringify(this.meta);
       return this.writeFileAtomic_(this.metaPath(), text, { mode: this.config.fileMode });
     });
@@ -377,6 +443,8 @@ class FileStore {
   }
 
   writeNodeFile_(node) {
+    this.writes.delete(node);
+
     let text = JSON.stringify(node);
     node[PTR].build(text);
     let path = this.ptrPath_(node[PTR]);
