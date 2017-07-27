@@ -109,9 +109,9 @@ describe("HttpStore", function() {
 
   it("reads index", function() {
     let promise = this.store.readMeta("index");
-    this.requests[0].respond(200, { "Content-Type": "application/json" }, '{ "rootPtr": "000000/000000" }');
+    this.requests[0].respond(200, { "Content-Type": "application/json" }, '{ "rootPtr$": "000000/000000" }');
     promise.then(index => {
-      expect(index).to.deep.equal({ rootPtr: "000000/000000" });      
+      expect(index).to.deep.equal({ rootPtr$: "000000/000000" });      
     });
   });
 })

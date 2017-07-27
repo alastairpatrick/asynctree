@@ -16,8 +16,8 @@ const replaceChild = (container, prop, ptr, tx) => {
 
 // When the size of a node is equal to a tree's order, it is the smallest allowable size.
 const nodeSize = (node) => {
-  if (node.children)
-    return node.children.length;
+  if (node.children$)
+    return node.children$.length;
   else
     return node.keys.length;
 }
@@ -61,7 +61,7 @@ class Tree {
     this.config = Object.assign({
       order: 1024,
     }, meta.config);
-    this.rootPtr = meta.rootPtr;
+    this.rootPtr = meta.rootPtr$;
   }
 
   static empty(store, config={}, TreeClass=Tree) {
@@ -71,7 +71,7 @@ class Tree {
     };
     store.write(root);
     return new TreeClass(store, {
-      rootPtr: root[PTR],
+      rootPtr$: root[PTR],
       config
     });
   }
@@ -95,7 +95,7 @@ class Tree {
 
   meta() {
     return {
-      rootPtr: this.rootPtr,
+      rootPtr$: this.rootPtr,
       config: this.config,
     };
   }
@@ -257,11 +257,11 @@ class Tree {
   set_(key, value, type, rootPtr) {
     let dummyRoot = {
       keys: [],
-      children: [rootPtr],
+      children$: [rootPtr],
     };
     return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue }) => {
-      if (dummyRoot.children.length === 1) {
-        rootPtr = dummyRoot.children[0];
+      if (dummyRoot.children$.length === 1) {
+        rootPtr = dummyRoot.children$[0];
       } else {
         this.store.write(node);
         rootPtr = node[PTR];
@@ -274,22 +274,22 @@ class Tree {
   setSubTree_(key, value, node, type) {
     let { idx, equal } = this.findKey_(key, node);
 
-    if (node.children) {
-      return this.store.read(node.children[idx]).then(child => {
+    if (node.children$) {
+      return this.store.read(node.children$[idx]).then(child => {
         child = cloneNode(child);
         return this.setSubTree_(key, value, child, type);
       }).then(({ node: child, idx: childIdx, oldValue }) => {
         let sibling, newKey;
         if (child.keys.length >= this.config.order * 2) {
-          if (child.children) {
+          if (child.children$) {
             sibling = {
               keys: child.keys.slice(this.config.order + 1),
-              children: child.children.slice(this.config.order + 1),
+              children$: child.children$.slice(this.config.order + 1),
             };
 
             newKey = child.keys[this.config.order];
 
-            child.children = child.children.slice(0, this.config.order + 1);
+            child.children$ = child.children$.slice(0, this.config.order + 1);
           } else {
             sibling = {
               keys: child.keys.slice(this.config.order),
@@ -305,11 +305,11 @@ class Tree {
           node.keys.splice(idx, 0, newKey);
 
           this.store.write(sibling);
-          node.children.splice(idx + 1, 0, sibling[PTR]);
+          node.children$.splice(idx + 1, 0, sibling[PTR]);
         }
 
         this.store.write(child);
-        replaceChild(node.children, idx, child[PTR], this.store);
+        replaceChild(node.children$, idx, child[PTR], this.store);
 
         return { node, idx, oldValue };
       });
@@ -360,8 +360,8 @@ class Tree {
       return this.deleteSubTree_(key, node);
     }).then(({ node, idx, oldValue }) => {
       if (oldValue !== undefined) {
-        if (node.children && node.children.length === 1) {
-          rootPtr = node.children[0];
+        if (node.children$ && node.children$.length === 1) {
+          rootPtr = node.children$[0];
         } else {
           this.store.write(node);
           rootPtr = node[PTR];
@@ -374,8 +374,8 @@ class Tree {
   deleteSubTree_(key, node) {
     let { idx, equal } = this.findKey_(key, node);
 
-    if (node.children) {
-      return this.store.read(node.children[idx]).then(child => {
+    if (node.children$) {
+      return this.store.read(node.children$[idx]).then(child => {
         child = cloneNode(child);
         return this.deleteSubTree_(key, child);
       }).then(({ node: child, idx: childIdx, oldValue }) => {
@@ -383,8 +383,8 @@ class Tree {
           return {};
 
         if (nodeSize(child) < this.config.order) {
-          let siblingIdx = idx === node.children.length - 1 ? idx - 1 : idx + 1;
-          return this.store.read(node.children[siblingIdx]).then(sibling => {
+          let siblingIdx = idx === node.children$.length - 1 ? idx - 1 : idx + 1;
+          return this.store.read(node.children$[siblingIdx]).then(sibling => {
             sibling = cloneNode(sibling);
 
             let child1, child2, push, pop, minIdx;
@@ -404,10 +404,10 @@ class Tree {
 
             if (nodeSize(sibling) > this.config.order) {
               // Child is too small and its sibling is big enough to spare a key so merge it in.
-              if (child.children) {
+              if (child.children$) {
                 push.call(child.keys, node.keys[minIdx]);
                 node.keys[minIdx] = pop.call(sibling.keys);
-                push.call(child.children, pop.call(sibling.children));
+                push.call(child.children$, pop.call(sibling.children$));
               } else {
                 if (siblingIdx < idx) {
                   child.keys.unshift(sibling.keys.pop());
@@ -420,30 +420,30 @@ class Tree {
               }
 
               this.store.write(sibling);
-              replaceChild(node.children, siblingIdx, sibling[PTR], this.store);
+              replaceChild(node.children$, siblingIdx, sibling[PTR], this.store);
             } else {
               // Child is too small and its sibling is not big enough to spare any keys so merge them.
-              if (child.children) {
+              if (child.children$) {
                 child.keys = child1.keys.concat([node.keys[minIdx]]).concat(child2.keys);
-                child.children = child1.children.concat(child2.children);
+                child.children$ = child1.children$.concat(child2.children$);
               } else {
                 child.keys = child1.keys.concat(child2.keys);
                 child.values = child1.values.concat(child2.values);
               }
 
               node.keys.splice(minIdx, 1);
-              replaceChild(node.children, siblingIdx, undefined, this.store);
-              node.children.splice(siblingIdx, 1);
+              replaceChild(node.children$, siblingIdx, undefined, this.store);
+              node.children$.splice(siblingIdx, 1);
             }
 
             this.store.write(child);
-            replaceChild(node.children, idx, child[PTR], this.store);
+            replaceChild(node.children$, idx, child[PTR], this.store);
             return { node, idx, oldValue };
           });
         }
         
         this.store.write(child);
-        replaceChild(node.children, idx, child[PTR], this.store);
+        replaceChild(node.children$, idx, child[PTR], this.store);
         return { node, idx, oldValue };
       });
     } else {
@@ -540,15 +540,15 @@ class Tree {
     else
       i = 0;
 
-    if (node.children) {
+    if (node.children$) {
       const processChildren = (node, i) => {
-        return this.store.read(node.children[i]).then(child => {
+        return this.store.read(node.children$[i]).then(child => {
           return this.rangeEach_(lower, upper, cb, context, child);
         }).then(result => {
           if (result == Tree.BREAK)
             return result;
           ++i;
-          if (i >= node.children.length)
+          if (i >= node.children$.length)
             return;
           if (upper !== undefined && i < node.keys.length && this.cmp(node.keys[i], upper) > 0)
             return;
@@ -572,7 +572,7 @@ class Tree {
   findKey_(key, node) {
     let low = 0;
     let high = node.keys.length;
-    if (node.children) {
+    if (node.children$) {
       while (low < high) {
         let mid = (low + high) >>> 1;
         let cmp = this.cmp(node.keys[mid], key);
@@ -609,11 +609,11 @@ class Tree {
 
   forEachPtr_(cb, context, node, depth, height) {
     ++depth;
-    if (!node.children)
+    if (!node.children$)
       return depth;
 
     const processChildren = (node, i) => {
-      let ptr = node.children[i];
+      let ptr = node.children$[i];
       return Promise.resolve(cb.call(context, ptr, depth)).then(skip => {
         // Optimization: read one leaf node to determine height of tree. Thereafter, all nodes at this depth are
         // leaf nodes so the expense of reading them is avoided, since they do not contain any pointers.
@@ -629,7 +629,7 @@ class Tree {
           height = h;
 
         ++i;
-        if (i >= node.children.length)
+        if (i >= node.children$.length)
           return height;
         return processChildren(node, i);
       });

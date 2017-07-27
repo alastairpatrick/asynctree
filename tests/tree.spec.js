@@ -17,14 +17,14 @@ const has = Object.prototype.hasOwnProperty;
 const deserializeTree = (store, json) => {
   let node = Object.assign({}, json);
   
-  if (!has.call(node, "children")) {
+  if (!has.call(node, "children$")) {
     store.write(node);
     return Promise.resolve(node[PTR]);
   }
 
-  let children = json.children.map(c => deserializeTree(store, c));
+  let children = json.children$.map(c => deserializeTree(store, c));
   return Promise.all(children).then(children => {
-    node.children = children;
+    node.children$ = children;
     store.write(node);
     return Promise.resolve(node[PTR]);
   });
@@ -34,12 +34,12 @@ const serializeTree = (store, ptr) => {
   return store.read(ptr).then(tree => {
     let json = Object.assign({}, tree);
 
-    if (!has.call(json, "children"))
+    if (!has.call(json, "children$"))
       return json;
 
-    let children = json.children.map(c => serializeTree(store, c));
+    let children = json.children$.map(c => serializeTree(store, c));
     return Promise.all(children).then(children => {
-      json.children = children;
+      json.children$ = children;
       return json;
     });
   });
@@ -97,7 +97,7 @@ fileStoreFactory.after = (store) => {
       it("tree with internal nodes", function() {
         return deserializeTree(this.store, {
           keys: [2],
-          children: [{
+          children$: [{
             keys: [1],
             values: [10],
           }, {
@@ -108,7 +108,7 @@ fileStoreFactory.after = (store) => {
           return serializeTree(this.store, ptr).then(tree => {
             expect(tree).to.deep.equal({
               keys: [2],
-              children: [{
+              children$: [{
                 keys: [1],
                 values: [10],
               }, {
@@ -258,7 +258,7 @@ fileStoreFactory.after = (store) => {
       it("20", function() {
         return deserializeTree(this.store, {
           keys: [16],
-          children: [{
+          children$: [{
             keys: [1, 4, 9],
             values: [1, 4, 9],
           }, {
@@ -267,7 +267,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(20, 20).then(() => {
@@ -275,7 +275,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [16],
-              children: [{
+              children$: [{
                 keys: [1, 4, 9],
                 values: [1, 4, 9],
               }, {
@@ -290,7 +290,7 @@ fileStoreFactory.after = (store) => {
       it("13", function() {
         return deserializeTree(this.store, {
           keys: [16],
-          children: [{
+          children$: [{
             keys: [1, 4, 9],
             values: [1, 4, 9],
           }, {
@@ -299,7 +299,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(13, 13).then(() => {
@@ -307,7 +307,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [9, 16],
-              children: [{
+              children$: [{
                 keys: [1, 4],
                 values: [1, 4],
               }, {
@@ -325,7 +325,7 @@ fileStoreFactory.after = (store) => {
       it("15", function() {
         return deserializeTree(this.store, {
           keys: [9, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -337,7 +337,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(15, 15).then(() => {
@@ -345,7 +345,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [9, 16],
-              children: [{
+              children$: [{
                 keys: [1, 4],
                 values: [1, 4],
               }, {
@@ -363,7 +363,7 @@ fileStoreFactory.after = (store) => {
       it("10", function() {
         return deserializeTree(this.store, {
           keys: [9, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -375,7 +375,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(10, 10).then(() => {
@@ -383,7 +383,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [9, 13, 16],
-              children: [{
+              children$: [{
                 keys: [1, 4],
                 values: [1, 4],
               }, {
@@ -404,7 +404,7 @@ fileStoreFactory.after = (store) => {
       it("11", function() {
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -419,7 +419,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(11, 11).then(() => {
@@ -427,7 +427,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [9, 13, 16],
-              children: [{
+              children$: [{
                 keys: [1, 4],
                 values: [1, 4],
               }, {
@@ -448,7 +448,7 @@ fileStoreFactory.after = (store) => {
       it("12", function() {
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -463,7 +463,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.insert(12, 12).then(() => {
@@ -471,9 +471,9 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [13],
-              children: [{
+              children$: [{
                 keys: [9, 11],
-                children: [{
+                children$: [{
                   keys: [1, 4],
                   values: [1, 4],
                 }, {
@@ -485,7 +485,7 @@ fileStoreFactory.after = (store) => {
                 }],
               }, {
                 keys: [16],
-                children: [{
+                children$: [{
                   keys: [13, 15],
                   values: [13, 15],
                 }, {
@@ -530,9 +530,9 @@ fileStoreFactory.after = (store) => {
       it("13", function() {
         return deserializeTree(this.store, {
           keys: [13],
-          children: [{
+          children$: [{
             keys: [9, 11],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -544,7 +544,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [16],
-            children: [{
+            children$: [{
               keys: [13, 15],
               values: [13, 15],
             }, {
@@ -554,7 +554,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.delete(13).then(value => {
@@ -563,9 +563,9 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [13],
-              children: [{
+              children$: [{
                 keys: [9, 11],
-                children: [{
+                children$: [{
                   keys: [1, 4],
                   values: [1, 4],
                 }, {
@@ -577,7 +577,7 @@ fileStoreFactory.after = (store) => {
                 }],
               }, {
                 keys: [20],
-                children: [{
+                children$: [{
                   keys: [15, 16],
                   values: [15, 16],
                 }, {
@@ -593,9 +593,9 @@ fileStoreFactory.after = (store) => {
       it("15", function() {
         return deserializeTree(this.store, {
           keys: [13],
-          children: [{
+          children$: [{
             keys: [9, 11],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -607,7 +607,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [20],
-            children: [{
+            children$: [{
               keys: [15, 16],
               values: [15, 16],
             }, {
@@ -617,7 +617,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.delete(15).then(value => {
@@ -626,9 +626,9 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [11],
-              children: [{
+              children$: [{
                 keys: [9],
-                children: [{
+                children$: [{
                   keys: [1, 4],
                   values: [1, 4],
                 }, {
@@ -637,7 +637,7 @@ fileStoreFactory.after = (store) => {
                 }],
               }, {
                 keys: [13],
-                children: [{
+                children$: [{
                   keys: [11, 12],
                   values: [11, 12],
                 }, {
@@ -654,9 +654,9 @@ fileStoreFactory.after = (store) => {
       it("1", function() {
         return deserializeTree(this.store, {
           keys: [11],
-          children: [{
+          children$: [{
             keys: [9],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -665,7 +665,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [13],
-            children: [{
+            children$: [{
               keys: [11, 12],
               values: [11, 12],
             }, {
@@ -675,7 +675,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.delete(1).then(value => {
@@ -684,7 +684,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [11, 13],
-              children: [{
+              children$: [{
                 keys: [4, 9, 10],
                 values: [4, 9, 10],
               }, {
@@ -702,7 +702,7 @@ fileStoreFactory.after = (store) => {
       it("merges into rightmost leaf", function() {
         return deserializeTree(this.store, {
           keys: [9, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -714,7 +714,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.delete(20).then(value => {
@@ -723,7 +723,7 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [9, 15],
-              children: [{
+              children$: [{
                 keys: [1, 4],
                 values: [1, 4],
               }, {
@@ -741,9 +741,9 @@ fileStoreFactory.after = (store) => {
       it("merges into leftmost internal node", function() {
         return deserializeTree(this.store, {
           keys: [11],
-          children: [{
+          children$: [{
             keys: [9],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -752,7 +752,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [15, 20],
-            children: [{
+            children$: [{
               keys: [11, 12],
               values: [11, 12],
             }, {
@@ -765,7 +765,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.delete(4).then(value => {
@@ -774,9 +774,9 @@ fileStoreFactory.after = (store) => {
           }).then(tree => {
             expect(tree).to.deep.equal({
               keys: [15],
-              children: [{
+              children$: [{
                 keys: [11],
-                children: [{
+                children$: [{
                   keys: [1, 9, 10],
                   values: [1, 9, 10],
                 }, {
@@ -785,7 +785,7 @@ fileStoreFactory.after = (store) => {
                 }],
               }, {
                 keys: [20],
-                children: [{
+                children$: [{
                   keys: [15, 16],
                   values: [15, 16],
                 }, {
@@ -804,7 +804,7 @@ fileStoreFactory.after = (store) => {
       it("change", function() {
         return deserializeTree(this.store, {
           keys: [16],
-          children: [{
+          children$: [{
             keys: [1, 4, 9],
             values: [1, 4, 9],
           }, {
@@ -813,7 +813,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, {
-            rootPtr: ptr,
+            rootPtr$: ptr,
             config: { order: 2 }
           });
           return tree.bulk([
@@ -830,7 +830,7 @@ fileStoreFactory.after = (store) => {
             return serializeTree(this.store, tree.rootPtr);
           }).then(tree => {
             expect(tree).to.deep.equal({
-              children: [{
+              children$: [{
                   keys: [4, 9],
                   values: [4, 9],
                 }, {
@@ -907,7 +907,7 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -921,7 +921,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.forEach((value, key) => {
             results.push([key, value]);
           });
@@ -945,7 +945,7 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -959,7 +959,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.forEach((value, key) => {
             results.push([key, value]);
             if (key >= 13)
@@ -984,7 +984,7 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -998,7 +998,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.forEach((value, key) => {
             results.push([key, value]);
             if (key >= 13)
@@ -1020,7 +1020,7 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
-          children: [{
+          children$: [{
             keys: [1, 4],
             values: [1, 4],
           }, {
@@ -1034,7 +1034,7 @@ fileStoreFactory.after = (store) => {
             values: [16, 20, 25],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.rangeEach(10, 16, (value, key) => {
             results.push([key, value]);
           });
@@ -1055,9 +1055,9 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [13],
-          children: [{
+          children$: [{
             keys: [9, 11],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -1069,7 +1069,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [16],
-            children: [{
+            children$: [{
               keys: [13, 15],
               values: [13, 15],
             }, {
@@ -1078,7 +1078,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.forEachPtr(ptr => {
             results.push(ptr);
           });
@@ -1092,9 +1092,9 @@ fileStoreFactory.after = (store) => {
         let results = [];
         return deserializeTree(this.store, {
           keys: [13],
-          children: [{
+          children$: [{
             keys: [9, 11],
-            children: [{
+            children$: [{
               keys: [1, 4],
               values: [1, 4],
             }, {
@@ -1106,7 +1106,7 @@ fileStoreFactory.after = (store) => {
             }],
           }, {
             keys: [16],
-            children: [{
+            children$: [{
               keys: [13, 15],
               values: [13, 15],
             }, {
@@ -1115,7 +1115,7 @@ fileStoreFactory.after = (store) => {
             }],
           }],
         }).then(ptr => {
-          let tree = new Tree(this.store, { rootPtr: ptr });
+          let tree = new Tree(this.store, { rootPtr$: ptr });
           return tree.forEachPtr((ptr, depth) => {
             results.push(ptr);
             return depth > 0;
@@ -1201,7 +1201,7 @@ fileStoreFactory.after = (store) => {
           return tree.insert(1, 10);
         }).then(() => {
           return this.store.writeMeta(meta => {
-            meta.myTree = tree;
+            meta.myTree = tree.meta();
           });
         }).then(() => {
           return this.store.readMeta();

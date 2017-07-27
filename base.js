@@ -9,8 +9,8 @@ const cloneNode = (node) => {
   }
   if (node.values)
     clone.values = node.values.slice();
-  if (node.children)
-    clone.children = node.children.slice();
+  if (node.children$)
+    clone.children$ = node.children$.slice();
   return clone;
 }
 

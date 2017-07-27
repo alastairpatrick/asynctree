@@ -75,21 +75,21 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     let parentNode = {
       keys: [],
-      children: [this.node1[PTR]],
+      children$: [this.node1[PTR]],
     };
     this.store.write(parentNode);
-    expect(parentNode[PTR].toJSON()).to.equal("f0/acd7edc9c4c24a1351b80e68e6d830");
+    expect(parentNode[PTR].toJSON()).to.equal("fd/5859149bee545b9a9c487b6eddd617");
   })
 
   it("writes nodes to files on flush", function() {
     this.store.write(this.node1);
     let parentNode = {
       keys: [],
-      children: [this.node1[PTR]],
+      children$: [this.node1[PTR]],
     };
     this.store.write(parentNode);
     return this.store.flush().then(() => {
-      expect(existsSync(join(TEMP_DIR, "node", "f0/acd7edc9c4c24a1351b80e68e6d830"))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", "fd/5859149bee545b9a9c487b6eddd617"))).to.be.true;
       expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.true;
     });
   })
@@ -98,7 +98,7 @@ describe("FileStore", function() {
     this.store.write(this.node1);
     let parentNode = {
       keys: [],
-      children: [this.node1[PTR]],
+      children$: [this.node1[PTR]],
     };
     this.store.write(parentNode);
     this.store.delete(parentNode[PTR]);
@@ -277,10 +277,10 @@ describe("FileStore", function() {
   });
 
   it("writes meta file", function() {
-    return this.store.writeMeta({ rootPtr: this.ptr1 }).then(meta => {
-      expect(meta).to.deep.equal({ rootPtr: this.ptr1 });
+    return this.store.writeMeta({ rootPtr$: this.ptr1 }).then(meta => {
+      expect(meta).to.deep.equal({ rootPtr$: this.ptr1 });
       let metaPath = join(TEMP_DIR, "meta");
-      expect(JSON.parse(readFileSync(metaPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
+      expect(JSON.parse(readFileSync(metaPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr$: this.ptr1 });
     });
   });
 
@@ -303,10 +303,10 @@ describe("FileStore", function() {
   });
 
   it("reads meta file", function() {
-    return this.store.writeMeta({ rootPtr: this.ptr1 }).then(() => {
+    return this.store.writeMeta({ rootPtr$: this.ptr1 }).then(() => {
       return this.store.readMeta();
     }).then(meta => {
-      expect(meta).to.deep.equal({ rootPtr: this.ptr1 });
+      expect(meta).to.deep.equal({ rootPtr$: this.ptr1 });
     });
   });
 
