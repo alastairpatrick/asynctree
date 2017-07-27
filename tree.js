@@ -53,16 +53,15 @@ const nodeSize = (node) => {
 class Tree {
   /**
    * Create a search tree.
-   * @param {*} config The confioguration, which must include the backing store for the tree's nodes.
-   * @param {*} [rootPtr] Pointer to the tree's root node or undefined to create an empty tree.
+   * @param {object} meta The metadata for the tree.
    * @returns {Tree} A new tree.
    */
-  constructor(store, rootPtr, config) {
+  constructor(store, meta) {
     this.store = store;
     this.config = Object.assign({
       order: 1024,
-    }, config);
-    this.rootPtr = rootPtr;
+    }, meta.config);
+    this.rootPtr = meta.rootPtr;
   }
 
   static empty(store, config={}, TreeClass=Tree) {
@@ -71,7 +70,10 @@ class Tree {
       values: [],
     };
     store.write(root);
-    return new TreeClass(store, root[PTR], config);
+    return new TreeClass(store, {
+      rootPtr: root[PTR],
+      config
+    });
   }
 
   clone(options) {
@@ -88,7 +90,14 @@ class Tree {
       }));
     }
 
-    return promise.then(() => new (this.constructor)(options.store, this.rootPtr, this.config));
+    return promise.then(() => new (this.constructor)(options.store, this.meta()));
+  }
+
+  meta() {
+    return {
+      rootPtr: this.rootPtr,
+      config: this.config,
+    };
   }
 
   /**
@@ -237,11 +246,6 @@ class Tree {
     let oldRootPtr = this.rootPtr;
     this.rootPtr = undefined;
     return this.set_(key, value, type, oldRootPtr).then(({ rootPtr, oldValue }) => {
-      this.store.writeMeta({
-        rootPtr: rootPtr,
-        config: this.config,
-      });
-
       this.rootPtr = rootPtr;
       return oldValue;
     }).catch(error => {
@@ -341,11 +345,6 @@ class Tree {
         this.rootPtr = oldRootPtr;
         return;
       }
-
-      this.store.writeMeta({
-        rootPtr: rootPtr,
-        config: this.config,
-      })
 
       this.rootPtr = rootPtr;
       return oldValue;
@@ -470,11 +469,6 @@ class Tree {
     let oldRootPtr = this.rootPtr;
     this.rootPtr = undefined;
     return this.bulk_(items, oldRootPtr).then(({ rootPtr }) => {
-      this.store.writeMeta({
-        rootPtr: rootPtr,
-        config: this.config,
-      });
-      
       this.rootPtr = rootPtr;
     }).catch(error => {
       this.rootPtr = oldRootPtr;

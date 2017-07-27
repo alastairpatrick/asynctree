@@ -9,7 +9,7 @@ class TestStore {
   constructor() {
     this.nodes = {};
     this.ptr = 1000;
-    this.meta = undefined;
+    this.meta = {};
   }
   
   read(ptr) {
@@ -47,8 +47,13 @@ class TestStore {
     return Promise.resolve(this.meta);
   }
 
-  writeMeta(path, meta) {
-    this.meta = meta;
+  writeMeta(transform) {
+    return Promise.resolve().then(() => {
+      let newMeta = transform(this.meta);
+      if (newMeta !== undefined)
+        this.meta = newMeta;
+      return this.meta;
+    });
   }
 
   flush() {

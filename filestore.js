@@ -274,8 +274,65 @@ class FileStore {
     });
   }
 
-  writeMeta(meta) {
-    this.meta = meta;
+  writeMeta(transform) {
+    if (typeof transform !== "function") {
+      let data = transform;
+      transform = () => data;
+    }
+
+    let metaPath = this.metaPath();
+    let lockPath = metaPath + ".lock";
+
+    let tries = 0;
+    const tryWrite = () => {
+      if (tries >= 100)
+        throw new Error("Tried to lock meta file too many times");
+      ++tries;
+
+      // This is synchonous so other threads do not cause the lock file to be abandoned.
+      let fd;
+      let unlinkPath;
+      try {
+        fd = fs.openSync(lockPath, "wx", this.config.fileMode);
+        unlinkPath = lockPath;
+      } catch (error) {
+        if (error.code !== "EEXIST")
+          throw error;
+        return Promise.resolve().then(tryWrite);
+      }
+
+      try {
+        let text;
+        try {
+          text = fs.readFileSync(metaPath, { encoding: "utf-8" });
+        } catch (error) {
+          if (error.code !== "ENOENT")
+            throw error;
+          text = "{}";
+        }
+
+        let meta = JSON.parse(text);
+        let newMeta = transform(meta);
+        if (newMeta !== undefined)
+          meta = newMeta;
+        text = JSON.stringify(meta);
+        fs.writeFileSync(fd, text);
+        fs.closeSync(fd);
+        fd = undefined;
+
+        fs.renameSync(lockPath, metaPath);
+        unlinkPath = undefined;
+
+        return meta;
+      } finally {
+        if (fd !== undefined)
+          fs.closeSync(fd);
+        if (unlinkPath !== undefined)
+          fs.unlinkSync(unlinkPath);
+      }
+    }
+
+    return this.flushWriteNodes().then(tryWrite);
   }
 
   flushWriteNodes() {
@@ -290,10 +347,7 @@ class FileStore {
   }
 
   flush() {
-    return this.flushWriteNodes().then(() => {
-      let text = JSON.stringify(this.meta);
-      return this.writeFileAtomic_(this.metaPath(), text, { mode: this.config.fileMode });
-    });
+    return this.flushWriteNodes();
   }
 
   sync() {

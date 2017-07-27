@@ -277,17 +277,36 @@ describe("FileStore", function() {
   });
 
   it("writes meta file", function() {
-    this.store.writeMeta({ rootPtr: this.ptr1 });
-    return this.store.flush().then(() => {
+    return this.store.writeMeta({ rootPtr: this.ptr1 }).then(meta => {
+      expect(meta).to.deep.equal({ rootPtr: this.ptr1 });
       let metaPath = join(TEMP_DIR, "meta");
       expect(JSON.parse(readFileSync(metaPath, { encoding: "utf-8" }))).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
+  it("transforms meta file", function() {
+    let promises = [];
+    for (let i = 0; i < 3; ++i) {
+      promises.push(this.store.writeMeta(meta => {
+        meta[i] = i;
+        return meta;
+      }));
+    }
+    return Promise.all(promises).then(() => {
+      let metaPath = join(TEMP_DIR, "meta");
+      expect(JSON.parse(readFileSync(metaPath, { encoding: "utf-8" }))).to.deep.equal({
+        "0": 0,
+        "1": 1,
+        "2": 2,
+      });
+    });
+  });
+
   it("reads meta file", function() {
-    this.store.writeMeta({ rootPtr: this.ptr1 });
-    return this.store.readMeta().then(index => {
-      expect(index).to.deep.equal({ rootPtr: this.ptr1 });
+    return this.store.writeMeta({ rootPtr: this.ptr1 }).then(() => {
+      return this.store.readMeta();
+    }).then(meta => {
+      expect(meta).to.deep.equal({ rootPtr: this.ptr1 });
     });
   });
 
