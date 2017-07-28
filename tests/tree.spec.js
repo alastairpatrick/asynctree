@@ -33,7 +33,8 @@ const deserializeTree = (store, json) => {
 const serializeTree = (store, ptr) => {
   return store.read(ptr).then(tree => {
     let json = Object.assign({}, tree);
-
+    delete json.id;
+    
     if (!has.call(json, "children$"))
       return json;
 

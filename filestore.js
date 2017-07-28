@@ -1,6 +1,6 @@
 "use strict";
 
-const { createHash } = require("crypto");
+const { createHash, randomBytes } = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const { dirname, join, resolve } = require("path");
@@ -24,6 +24,10 @@ const writeFile = promisify(fs.writeFile);
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
+
+const hexString = (v) => {
+  return ("00000000" + v.toString(16)).slice(-8);
+}
 
 const mkdirp = (path) => {
   return mkdir(path).catch(error => {
@@ -50,7 +54,7 @@ class Ptr {
   }
 
   build(text) {
-    if (this.hash === undefined);
+    if (this.hash === undefined)
       this.hash = this.store.hash_(text);
   }
 
@@ -93,9 +97,11 @@ class FileStore {
     this.writes = new Set();
     this.cache = new Map();
     this.meta = undefined;
+    this.sessionId = randomBytes(4).toString("hex");
+    this.nextSeqId = 0;
     this.tmpCount = 0;
   }
-  
+
   invalidate_() {
     this.dir = undefined;
     this.config = undefined;
@@ -172,6 +178,7 @@ class FileStore {
   }
   
   write(node) {
+    node.id = this.sessionId + hexString(this.nextSeqId++);
     let ptr = new Ptr(this, node);
     node[PTR] = ptr;
     this.writes.add(node);

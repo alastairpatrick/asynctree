@@ -19,15 +19,15 @@ describe("FileStore", function() {
       keys: [1],
       values: [1],
     };
-    this.ptr1 = "8a/e9b8c4137941181c067514bdcb2371";
-    this.dir1 = "8a";
+    this.ptr1 = "06/e2e90fd816bb9042ee601a9468654b";
+    this.dir1 = "06";
 
     this.node2 = {
       keys: [2],
       values: [2],
     };
-    this.ptr2 = "de/6cdc8f57b0b7af87574f6ff128a297";
-    this.dir2 = "de";
+    this.ptr2 = "b2/48211fa97986189042d075e431779c";
+    this.dir2 = "b2";
 
 
     sh.mkdir("-p", TEMP_DIR);
@@ -43,6 +43,9 @@ describe("FileStore", function() {
       }).then(store2 => {
         this.store = store;
         this.store2 = store2;
+
+        this.store.sessionId = "00000001";
+        this.store.sessionId = "00000002";
       });
     });
   })
@@ -55,7 +58,9 @@ describe("FileStore", function() {
 
   it("can read written nodes", function() {
     this.store.write(this.node1);
+    expect(this.node1.id).to.equal("0000000200000000");
     return this.store.read(this.node1[PTR]).then(node => {
+      expect(node.id).to.equal("0000000200000000");
       expect(node).to.deep.equal(this.node1);
       expect(node).to.equal(this.node1);
     });
@@ -78,7 +83,7 @@ describe("FileStore", function() {
       children$: [this.node1[PTR]],
     };
     this.store.write(parentNode);
-    expect(parentNode[PTR].toJSON()).to.equal("fd/5859149bee545b9a9c487b6eddd617");
+    expect(parentNode[PTR].toJSON()).to.equal("d4/62b9c4ceb9deab734bee8f0adc9e27");
   })
 
   it("writes nodes to files on flush", function() {
@@ -89,7 +94,7 @@ describe("FileStore", function() {
     };
     this.store.write(parentNode);
     return this.store.flush().then(() => {
-      expect(existsSync(join(TEMP_DIR, "node", "fd/5859149bee545b9a9c487b6eddd617"))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", "d4/62b9c4ceb9deab734bee8f0adc9e27"))).to.be.true;
       expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.true;
     });
   })
@@ -148,9 +153,9 @@ describe("FileStore", function() {
   })
 
   it("can read nodes written by other store", function() {
-    this.store2.write(this.node1);
-    return this.store2.flush().then(() => {
-      return this.store.read(this.ptr1).then(node => {
+    this.store.write(this.node1);
+    return this.store.flush().then(() => {
+      return this.store2.read(this.ptr1).then(node => {
         expect(node[PTR]).to.equal(this.ptr1);
         expect(node).to.deep.equal(this.node1);
         expect(node).to.not.equal(this.node1);
@@ -159,9 +164,9 @@ describe("FileStore", function() {
   })
 
   it("cannot delete nodes written by other store", function() {
-    this.store2.write(this.node1);
-    return this.store2.flush().then(() => {
-      return this.store.delete(this.ptr1).then(() => {
+    this.store.write(this.node1);
+    return this.store.flush().then(() => {
+      return this.store2.delete(this.ptr1).then(() => {
         expect.fail("Did not throw");
       }).catch(error => {
         expect(error).to.match(/delete/);
@@ -170,11 +175,11 @@ describe("FileStore", function() {
   })
 
   it("caches nodes read from file", function() {
-    this.store2.write(this.node1);
-    return this.store2.flush().then(() => {
-      return this.store.read(this.ptr1).then(node => {
-        expect(this.store.cache.get(this.ptr1)).to.deep.equal(node);
-        return this.store.read(this.ptr1).then(node2 => {
+    this.store.write(this.node1);
+    return this.store.flush().then(() => {
+      return this.store2.read(this.ptr1).then(node => {
+        expect(this.store2.cache.get(this.ptr1)).to.deep.equal(node);
+        return this.store2.read(this.ptr1).then(node2 => {
           expect(node2).to.deep.equal(node);
         });
       });
@@ -182,23 +187,23 @@ describe("FileStore", function() {
   })
 
   it("evicts nodes from read cache", function() {
-    this.store.config.cacheSize = 1;
-    this.store2.write(this.node1);
-    this.store2.write(this.node2);
-    return this.store2.flush().then(() => {
-      return this.store.read(this.ptr1).then(node1 => {
-        return this.store.read(this.ptr2).then(node2 => {  // evicts node1
-          expect(this.store.cache.get(this.ptr2)).to.deep.equal(node2);
-          expect(this.store.cache.has(this.ptr1)).to.be.false;
+    this.store2.config.cacheSize = 1;
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    return this.store.flush().then(() => {
+      return this.store2.read(this.ptr1).then(node1 => {
+        return this.store2.read(this.ptr2).then(node2 => {  // evicts node1
+          expect(this.store2.cache.get(this.ptr2)).to.deep.equal(node2);
+          expect(this.store2.cache.has(this.ptr1)).to.be.false;
         });
       });
     });
   })
 
   it("can read written compressed nodes", function() {
-    this.store.config.compress = true;
-    this.store.write(this.node1);
-    return this.store.read(this.node1[PTR]).then(node => {
+    this.store2.config.compress = true;
+    this.store2.write(this.node1);
+    return this.store2.read(this.node1[PTR]).then(node => {
       expect(node).to.deep.equal(this.node1);
       expect(node).to.equal(this.node1);
     });
@@ -236,14 +241,14 @@ describe("FileStore", function() {
       cacheSize: Infinity,
       compress: false,
     }).then(store2 => {
-      store2.write(this.node1);
-      return this.store.copy(store2, this.ptr1).then(() => {
-        return this.store.copy(store2, this.ptr1); // second time to test overwriting
+      this.store.write(this.node1);
+      return store2.copy(this.store, this.ptr1).then(() => {
+        return store2.copy(this.store, this.ptr1); // second time to test overwriting
+      }).then(() => {
+        return store2.read(this.ptr1);
+      }).then(node => {
+        expect(node).to.deep.equal(this.node1);
       });
-    }).then(() => {
-      return this.store.read(this.ptr1);
-    }).then(node => {
-      expect(node).to.deep.equal(this.node1);
     });
   })
   
@@ -252,14 +257,14 @@ describe("FileStore", function() {
       cacheSize: Infinity,
       compress: false,
     }).then(store2 => {
-      store2.write(this.node1);
-      return this.store.copy(store2, this.ptr1, { tryLink: false }).then(() => {
-        return this.store.copy(store2, this.ptr1, { tryLink: false }); // second time to test overwriting
+      this.store.write(this.node1);
+      return store2.copy(this.store, this.ptr1, { tryLink: false }).then(() => {
+        return store2.copy(this.store, this.ptr1, { tryLink: false }); // second time to test overwriting
+      }).then(() => {
+        return store2.read(this.ptr1);
+      }).then(node => {
+        expect(node).to.deep.equal(this.node1);
       });
-    }).then(() => {
-      return this.store.read(this.ptr1);
-    }).then(node => {
-      expect(node).to.deep.equal(this.node1);
     });
   })
   
