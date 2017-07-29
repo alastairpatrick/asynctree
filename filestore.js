@@ -11,6 +11,7 @@ const { PTR } = require("./tree");
 
 const has = Object.prototype.hasOwnProperty;
 
+const chmod = promisify(fs.chmod);
 const link = promisify(fs.link);
 const lstat = promisify(fs.lstat);
 const mkdtemp = promisify(fs.mkdtemp);
@@ -19,6 +20,7 @@ const readdir = promisify(fs.readdir);
 const readFile = promisify(fs.readFile);
 const rename = promisify(fs.rename);
 const rmdir = promisify(fs.rmdir);
+const stat = promisify(fs.stat);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
 
@@ -208,17 +210,15 @@ class FileStore {
   copy(fromStore, ptr, options) {
     options = Object.assign({
       tryLink: true,
-      touch: false,
+      mark: false,
     }, options);
 
     let fromPath = fromStore.ptrPath_(ptr);
     let toPath = this.ptrPath_(ptr);
 
-    const touch = () => {
+    const mark = () => {
       let tempPath = this.tmpPath_();
-      return link(toPath, tempPath).then(() => {
-        return unlink(tempPath);
-      }).then(() => true);
+      return chmod(toPath, this.config.fileMode).then(() => true);
     }
 
     const doCopy = () => {
@@ -228,7 +228,7 @@ class FileStore {
     }
 
     const doLink = () => {
-      if (options.touch) {
+      if (options.mark) {
         let tempPath = this.tmpPath_();
         return link(fromPath, tempPath).then(() => {
           return rename(tempPath, toPath);
@@ -253,8 +253,8 @@ class FileStore {
     return fromStore.flushWriteNodes().then(() => {
       return this.schedulePathTask_(toPath, () => {
         if (fromStore === this) {
-          if (options.touch) {
-            return touch();
+          if (options.mark) {
+            return mark();
           }
         } else {
           if (options.tryLink) {
@@ -363,6 +363,42 @@ class FileStore {
     });
   }
   
+  sweep(time) {
+    return readdir(join(this.dir, "node")).then(dirs => {
+      let dirIdx = -1;
+      const processDirs = () => {
+        if (++dirIdx >= dirs.length)
+          return;
+        let dirPath = join(this.dir, "node", dirs[dirIdx]);
+        return readdir(join(dirPath)).then(files => {
+          let fileIdx = -1;
+          const processFiles = () => {
+            if (++fileIdx >= files.length)
+              return;
+            let filePath = join(dirPath, files[fileIdx]);
+            return this.schedulePathTask_(filePath, () => {
+              return stat(filePath).then(stats => {
+                if (stats.ctime.getTime() < time)
+                  return unlink(filePath);
+              }).catch(error => {
+                if (error.code !== "ENOENT")
+                  throw error;
+              }).then(processFiles);
+            });
+          }
+          return processFiles();
+        }).catch(error => {
+          if (error.code !== "ENOENT")
+            throw error;
+        }).then(processDirs);
+      }
+      return processDirs();
+    }).catch(error => {
+      if (error.code !== "ENOENT")
+        throw error;
+    });
+  }
+
   schedulePathTask_(path, task) {
     let pathTask = this.pathTasks.get(path);
     if (pathTask === undefined) {

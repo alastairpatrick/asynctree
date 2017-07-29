@@ -268,14 +268,38 @@ describe("FileStore", function() {
     });
   })
   
-  it("touches node", function() {
+  it("marks node", function() {
     this.store.write(this.node1);
-    return this.store.copy(this.store, this.ptr1, { touch: true }).then(() => {
+    return this.store.copy(this.store, this.ptr1, { mark: true }).then(() => {
       return this.store.read(this.ptr1);
     }).then(node => {
       expect(node).to.deep.equal(this.node1);
     });
   })
+
+  it("sweeps nodes last changed before time", function() {
+    let time = Date.now();
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    return this.store.flush().then(() => {
+      return this.store.sweep(time + 1000);
+    }).then(() => {
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.false;
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr2))).to.be.false;
+    });
+  });
+
+  it("sweep does not delete nodes changed on or after time", function() {
+    let time = Date.now();
+    this.store.write(this.node1);
+    this.store.write(this.node2);
+    return this.store.flush().then(() => {
+      return this.store.sweep(time - 1000);
+    }).then(() => {
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr1))).to.be.true;
+      expect(existsSync(join(TEMP_DIR, "node", this.ptr2))).to.be.true;
+    });
+  });
 
   it("returns meta path", function() {
     expect(this.store.metaPath()).to.equal(join(TEMP_DIR, "meta"));
