@@ -637,6 +637,21 @@ class Tree {
 
     return processChildren(node, 0);
   }
+
+  static garbageCollect(store, cb) {
+    const markTree = (meta) => {
+      let tree = new Tree(store, meta);
+      return tree.forEachPtr(ptr => {
+        return store.copy(store, ptr, { mark: true }).then(() => false);
+      });
+    }
+
+    return store.readMeta().then(meta => {
+      return cb(meta, markTree);
+    }).then(() => {
+      return store.sweep();
+    });
+  }
 }
 
 Tree.BREAK = Symbol("BREAK");

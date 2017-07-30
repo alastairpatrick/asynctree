@@ -59,6 +59,10 @@ class TestStore {
   flush() {
     return Promise.resolve();
   }
+
+  sweep() {
+    return Promise.resolve();
+  }
 }
 
 module.exports = {

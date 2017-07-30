@@ -1213,6 +1213,21 @@ fileStoreFactory.after = (store) => {
           expect(value).to.equal(10);
         });
       })
+
+      it("garbage collects", function() {
+        let tree = Tree.empty(this.store);
+        return tree.insert(2, 20).then(() => {
+          return tree.insert(1, 10);
+        }).then(() => {
+          return this.store.writeMeta(meta => {
+            meta.myTree = tree.meta();
+          });
+        }).then(() => {
+          return Tree.garbageCollect(this.store, (meta, mark) => {
+            return mark(meta.myTree);
+          });
+        });
+      });
     })
   })
 })
