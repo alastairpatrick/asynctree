@@ -134,11 +134,11 @@ fileStoreFactory.after = (store) => {
         });
       })
 
-      it("can clone tree, touching all target nodes", function() {
+      it("can clone tree, marking all target nodes", function() {
         let tree = Tree.empty(this.store);
         return tree.insert(1, 10).then(() => {
           return tree.clone({
-            touch: true,
+            mark: true,
           });
         }).then(clone => {
           return clone.get(1);
@@ -1180,6 +1180,9 @@ fileStoreFactory.after = (store) => {
           else
             promise = tree.set(key, value);
 
+          if (i % 10000 === 0)
+            promise = promise.then(() => tree.commit());
+
           return promise.catch(() => {}).then(() => {
             if (i >= 20000) {
               return this.store.flush().then(() => {
@@ -1195,14 +1198,14 @@ fileStoreFactory.after = (store) => {
       }).timeout(600000);
     })
 
-    describe("meta", function() {
-      it("writes", function() {
+    describe("transaction", function() {
+      it("writes committed tree", function() {
         let tree = Tree.empty(this.store);
         return tree.insert(2, 20).then(() => {
           return tree.insert(1, 10);
         }).then(() => {
           return this.store.writeMeta(meta => {
-            meta.myTree = tree.meta();
+            meta.myTree = tree.commit();
           });
         }).then(() => {
           return this.store.readMeta();
@@ -1214,13 +1217,26 @@ fileStoreFactory.after = (store) => {
         });
       })
 
-      it("garbage collects", function() {
+      it("can rollback operations since last commit", function() {
+        let tree = Tree.empty(this.store);
+        return tree.insert(1, 10).then(() => {
+          tree.commit();
+          return tree.update(1, 20);
+        }).then(() => {
+          tree.rollback();
+          return tree.get(1);
+        }).then(value => {
+          expect(value).to.equal(10);
+        });
+      })
+
+      it("garbage collects tree in store", function() {
         let tree = Tree.empty(this.store);
         return tree.insert(2, 20).then(() => {
           return tree.insert(1, 10);
         }).then(() => {
           return this.store.writeMeta(meta => {
-            meta.myTree = tree.meta();
+            meta.myTree = tree.commit();
           });
         }).then(() => {
           return Tree.garbageCollect(this.store, (meta, mark) => {

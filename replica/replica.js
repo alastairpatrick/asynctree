@@ -10,7 +10,7 @@ class Replica {
 
     this.config = config;
     this.committed = tree;
-    this.uncommitted = tree.clone();
+    this.uncommitted = this.committed.cloneSync();
     this.indexName = undefined;
 
     this.onEvent = this.onEvent.bind(this);
@@ -22,6 +22,7 @@ class Replica {
       count: 0,
       writing: Promise.resolve(),
     };
+
     config.tables.forEach((table, tableIdx) => {
       if (!has.call(byName, table.schema))
         byName[table.schema] = {};
@@ -96,10 +97,11 @@ class Replica {
   commit(name) {
     this.flush();
     return this.streaming.writing = this.streaming.writing.then(() => {
-      return this.uncommitted.commit(name)
+      return this.committed.store.writeMeta(meta => {
+        meta[name] = this.uncommitted.commit();
+      });
     }).then(() => {
-      this.committed = this.uncommitted;
-      this.uncommitted = this.uncommitted.clone();
+      this.committed = this.uncommitted.cloneSync();
       this.indexName = name;
       this.streaming.count = 0;
     });
