@@ -1129,6 +1129,8 @@ fileStoreFactory.after = (store) => {
     })
 
     describe("fuzz", function() {
+      const FUZZ_SIZE = 20000;
+
       it("bulk insert", function(done) {
         let tree = Tree.empty(this.store);
 
@@ -1148,7 +1150,7 @@ fileStoreFactory.after = (store) => {
           let promise = tree.bulk(changes);
 
           return promise.catch(() => {}).then(() => {
-            if (i >= 20000) {
+            if (i >= FUZZ_SIZE) {
               return this.store.flush().then(() => {
                 done();
               });
@@ -1184,7 +1186,7 @@ fileStoreFactory.after = (store) => {
             promise = promise.then(() => tree.commit());
 
           return promise.catch(() => {}).then(() => {
-            if (i >= 20000) {
+            if (i >= FUZZ_SIZE) {
               return this.store.flush().then(() => {
                 done();
               });
