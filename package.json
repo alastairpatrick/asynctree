@@ -18,7 +18,7 @@
   "license": "MIT",
   "devDependencies": {
     "chai": "^4.0.2",
-    "mocha": "^3.4.2",
+    "mocha": "^5.2.0",
     "pg": "^6.4.1",
     "pg-cursor": "^1.2.0",
     "shelljs": "^0.7.8",
