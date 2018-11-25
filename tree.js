@@ -30,6 +30,19 @@ const nodeSize = (node) => {
  * @param {*} key
  */
 
+ /**
+  * Range of keys. Endpoints can be open (not included) or closed (included). 
+  */
+ class Range {
+  constructor(lower=undefined, upper=undefined, lowerOpen=false, upperOpen=false) {
+    this.lower = lower;
+    this.upper = upper;
+    this.lowerOpen = lowerOpen;
+    this.upperOpen = upperOpen;
+  }
+ }
+
+
 /**
  * Asynchronous, immutable, persistent multi-way search tree of key-value pairs.
  * 
@@ -554,7 +567,7 @@ class Tree {
    */
   get(key) {
     let results = [];
-    return this.rangeEach(key, key, value => results.push(value)).then(() => {
+    return this.rangeEach(new Range(key, key), value => results.push(value)).then(() => {
       return results[0];
     });
   }
@@ -568,67 +581,87 @@ class Tree {
    * @returns {Promise} Fulfilled after iteration has completed.
    */
   forEach(cb, context) {
-    return this.rangeEach(undefined, undefined, cb, context);
+    return this.rangeEach(new Range(undefined, undefined), cb, context);
   }
 
   /**
    * Iterates over every entry in the tree. Enumeration may be terminated early by throwing an exception from
    * the callback function, which will reject the returned promise, or when the callback returns BREAK, which
    * resolves the promise.
-   * @param {*} lower Key at which to begin iteration.
-   * @param {*} upper Key at which to end iteration.
+   * @param {Range} range Range of keys.
    * @param {EachCallback} cb Callback to invoke for each entry.
    * @param {Object} context Value of 'this' for callback.
    * @returns {Promise} Fulfilled after iteration has completed.
    */
-  rangeEach(lower, upper, cb, context) {
+  rangeEach(range, cb, context) {
     if (this.rootPtr === undefined)
       throw new Error("Operation in progress");
     return this.tx.read(this.rootPtr).then(node => {
-      return this.rangeEach_(lower, upper, cb, context, node);
+      return this.rangeEach_(range, cb, context, node);
     });
   }
 
-  rangeEach_(lower, upper, cb, context, node) {
+  rangeEach_(range, cb, context, node) {
     let i;
-    if (lower !== undefined)
-      i = this.findKey_(lower, node).idx;
-    else
+    if (range.lower !== undefined) {
+      i = this.findKey_(range.lower, node, range.lowerOpen).idx;
+    } else {
       i = 0;
+    }
 
     if (node.children$) {
       const processChildren = (node, i) => {
         return this.tx.read(node.children$[i]).then(child => {
-          return this.rangeEach_(lower, upper, cb, context, child);
+          return this.rangeEach_(range, cb, context, child);
         }).then(result => {
-          if (result == Tree.BREAK)
+          if (result == Tree.BREAK) {
             return result;
+          }
           ++i;
-          if (i >= node.children$.length)
+          if (i >= node.children$.length) {
             return;
-          if (upper !== undefined && i < node.keys.length && this.cmp(node.keys[i], upper) > 0)
+          }
+          if (i < node.keys.length && this.cmpKey(node.keys[i], this.upper)) {
             return;
+          }
           return processChildren(node, i);
         });
       }
 
       return processChildren(node, i);
     } else {
+      let outsideUpper;
+      if (range.upper !== undefined) {
+        if (range.upperOpen) {
+          outsideUpper = (k) => {
+            return this.cmp(k, range.upper) >= 0
+          }
+        } else {
+          outsideUpper = (k) => {
+            return this.cmp(k, range.upper) > 0
+          }
+        }
+      } else {
+        outsideUpper = (k) => false;
+      }
+  
       for (; i < node.values.length; ++i) {
         let key = node.keys[i];
-        if (this.cmpKey(key, upper) > 0)
+        if (outsideUpper(key)) {
           break;
+        }
         let value = node.values[i];
-        if (cb.call(context, value, key) === Tree.BREAK)
+        if (cb.call(context, value, key) === Tree.BREAK) {
           return Tree.BREAK;
+        }
       }
     }
   }
 
-  findKey_(key, node) {
+  findKey_(key, node, open) {
     let low = 0;
     let high = node.keys.length;
-    if (node.children$) {
+    if (open || node.children$) {
       while (low < high) {
         let mid = (low + high) >>> 1;
         let cmp = this.cmpKey(node.keys[mid], key);
@@ -714,5 +747,6 @@ Tree.BREAK = Symbol("BREAK");
 
 module.exports = {
   Tree,
+  Range,
   PTR,
 };

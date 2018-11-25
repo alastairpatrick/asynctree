@@ -5,7 +5,7 @@ const { join } = require("path");
 const sh = require("shelljs");
 const sinon = require("sinon");
 
-const { Tree, PTR, Transaction, cloneNode } = require("..");
+const { Tree, Range, PTR } = require("..");
 const { FileStore } = require("../filestore");
 const { TestStore } = require("./teststore");
 
@@ -1054,7 +1054,7 @@ fileStoreFactory.after = (store) => {
           }],
         }).then(ptr => {
           let tree = new Tree(this.store, { rootPtr$: ptr });
-          return tree.rangeEach(10, 16, (value, key) => {
+          return tree.rangeEach(new Range(10, 16), (value, key) => {
             results.push([key, value]);
           });
         }).then(() => {
@@ -1067,6 +1067,101 @@ fileStoreFactory.after = (store) => {
           ]);
         });
       })
+    })
+
+    it("finds records in range (10, 16]", function() {
+      let results = [];
+      return deserializeTree(this.store, {
+        keys: [9, 13, 16],
+        children$: [{
+          keys: [1, 4],
+          values: [1, 4],
+        }, {
+          keys: [9, 10, 11],
+          values: [9, 10, 11],
+        }, {
+          keys: [13, 15],
+          values: [13, 15],
+        }, {
+          keys: [16, 20, 25],
+          values: [16, 20, 25],
+        }],
+      }).then(ptr => {
+        let tree = new Tree(this.store, { rootPtr$: ptr });
+        return tree.rangeEach(new Range(10, 16, true, false), (value, key) => {
+          results.push([key, value]);
+        });
+      }).then(() => {
+        expect(results).to.deep.equal([
+          [11, 11],
+          [13, 13],
+          [15, 15],
+          [16, 16],
+        ]);
+      });
+    })
+
+    it("finds records in range [10, 16)", function() {
+      let results = [];
+      return deserializeTree(this.store, {
+        keys: [9, 13, 16],
+        children$: [{
+          keys: [1, 4],
+          values: [1, 4],
+        }, {
+          keys: [9, 10, 11],
+          values: [9, 10, 11],
+        }, {
+          keys: [13, 15],
+          values: [13, 15],
+        }, {
+          keys: [16, 20, 25],
+          values: [16, 20, 25],
+        }],
+      }).then(ptr => {
+        let tree = new Tree(this.store, { rootPtr$: ptr });
+        return tree.rangeEach(new Range(10, 16, false, true), (value, key) => {
+          results.push([key, value]);
+        });
+      }).then(() => {
+        expect(results).to.deep.equal([
+          [10, 10],
+          [11, 11],
+          [13, 13],
+          [15, 15],
+        ]);
+      });
+    })
+
+    it("finds records in range (10, 16)", function() {
+      let results = [];
+      return deserializeTree(this.store, {
+        keys: [9, 13, 16],
+        children$: [{
+          keys: [1, 4],
+          values: [1, 4],
+        }, {
+          keys: [9, 10, 11],
+          values: [9, 10, 11],
+        }, {
+          keys: [13, 15],
+          values: [13, 15],
+        }, {
+          keys: [16, 20, 25],
+          values: [16, 20, 25],
+        }],
+      }).then(ptr => {
+        let tree = new Tree(this.store, { rootPtr$: ptr });
+        return tree.rangeEach(new Range(10, 16, true, true), (value, key) => {
+          results.push([key, value]);
+        });
+      }).then(() => {
+        expect(results).to.deep.equal([
+          [11, 11],
+          [13, 13],
+          [15, 15],
+        ]);
+      });
     })
 
     describe("forEachPtr", function() {
