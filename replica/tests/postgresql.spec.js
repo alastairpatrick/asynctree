@@ -23,7 +23,7 @@ const readAll = (cursor) => {
 }
 
 // Need to have a database configured to run these tests so they are disabled.
-describe("Publisher", function() {
+xdescribe("Publisher", function() {
   beforeEach(function() {
     this.client = new Client({
       connectionString: "postgres://postgres@localhost:5432/zeta",
