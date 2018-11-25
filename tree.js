@@ -112,7 +112,7 @@ class Tree {
   }
 
   /**
-   * Compare a pair of keys. When keys are of different types, the order is
+   * Compare a pair of keys or values. When keys are of different types, the order is
    * boolean < number < string < array < object < null.
    * @param {*} a A key to compare.
    * @param {*} b Another key to compare.
@@ -143,6 +143,27 @@ class Tree {
       else
         return 0;
     }
+  }
+
+  /**
+   * Compare a pair of keys. When keys are of different types, the order is
+   * boolean < number < string < array < object < null.
+   * @param {*} a A key to compare.
+   * @param {*} b Another key to compare.
+   * @returns {number} -1 if a < b, 1 if a > b and 0 otherwise.
+   */
+  cmpKey(a, b) {
+    return this.cmp(a, b);
+  }
+
+  /**
+   * Determine whether values are equal. Used to avoid redundant updates.
+   * @param {*} a A key to compare.
+   * @param {*} b Another key to compare.
+   * @returns {boolean} Whether values the same.
+   */
+  equalValue(a, b) {
+    return this.cmp(a, b) === 0;
   }
 
   /**
@@ -229,7 +250,7 @@ class Tree {
    * Inserts an entry into the tree, rejecting if the key is already present.
    * @param {*} key The key.
    * @param {*} value Its value.
-   * @returns {Promise} Resolves to the new tree.
+   * @returns {Promise} Resolves on successful completion.
    */
   insert(key, value) {
     return this.set(key, value, "insert");
@@ -239,7 +260,7 @@ class Tree {
    * Updates the value of an existing value in the tree, rejecting if the key is not present.
    * @param {*} key The key.
    * @param {*} value Its value.
-   * @returns {Promise} Resolves to the new tree.
+   * @returns {Promise} Resolves to the old value associated with the key or undefined if not present.
    */
   update(key, value) {
     return this.set(key, value, "update");
@@ -249,7 +270,7 @@ class Tree {
    * Sets the value of a key, inserting a new entry or updating an existing one as necessary.
    * @param {*} key The key.
    * @param {*} value Its value.
-   * @returns {Promise} Resolves to the new tree.
+   * @returns {Promise} Resolves to the old value associated with the key or undefined if not present.
    */
   set(key, value, type) {
     if (this.rootPtr === undefined)
@@ -257,9 +278,13 @@ class Tree {
     let oldTx = this.tx;
     this.tx = new TransactionStore(oldTx, this.rootPtr);
     this.rootPtr = undefined;
-    return this.set_(key, value, type, this.tx.rootPtr).then(({ rootPtr, oldValue }) => {
-      this.tx.commit();
-      this.rootPtr = rootPtr;
+    return this.set_(key, value, type, this.tx.rootPtr).then(({ rootPtr, oldValue, changed }) => {
+      if (changed) {
+        this.tx.commit();
+        this.rootPtr = rootPtr;
+      } else {
+        this.rootPtr = this.tx.rollback();
+      }
       this.tx = oldTx;
       return oldValue;
     }).catch(error => {
@@ -274,15 +299,17 @@ class Tree {
       keys: [],
       children$: [rootPtr],
     };
-    return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue }) => {
-      if (dummyRoot.children$.length === 1) {
-        rootPtr = dummyRoot.children$[0];
-      } else {
-        this.tx.write(node);
-        rootPtr = node[PTR];
+    return this.setSubTree_(key, value, dummyRoot, type).then(({ node, oldValue, changed }) => {
+      if (changed) {
+        if (dummyRoot.children$.length === 1) {
+          rootPtr = dummyRoot.children$[0];
+        } else {
+          this.tx.write(node);
+          rootPtr = node[PTR];
+        }
       }
 
-      return { oldValue, rootPtr };
+      return { oldValue, rootPtr, changed };
     });
   }
 
@@ -293,62 +320,69 @@ class Tree {
       return this.tx.read(node.children$[idx]).then(child => {
         child = cloneNode(child);
         return this.setSubTree_(key, value, child, type);
-      }).then(({ node: child, idx: childIdx, oldValue }) => {
-        let sibling, newKey;
-        if (child.keys.length >= this.config.order * 2) {
-          if (child.children$) {
-            sibling = {
-              keys: child.keys.slice(this.config.order + 1),
-              children$: child.children$.slice(this.config.order + 1),
-            };
+      }).then(({ node: child, idx: childIdx, oldValue, changed }) => {
+        if (changed) {
+          let sibling, newKey;
+          if (child.keys.length >= this.config.order * 2) {
+            if (child.children$) {
+              sibling = {
+                keys: child.keys.slice(this.config.order + 1),
+                children$: child.children$.slice(this.config.order + 1),
+              };
 
-            newKey = child.keys[this.config.order];
+              newKey = child.keys[this.config.order];
 
-            child.children$ = child.children$.slice(0, this.config.order + 1);
-          } else {
-            sibling = {
-              keys: child.keys.slice(this.config.order),
-              values: child.values.slice(this.config.order),
-            };
-            newKey = sibling.keys[0];
-            
-            child.values = child.values.slice(0, this.config.order);
+              child.children$ = child.children$.slice(0, this.config.order + 1);
+            } else {
+              sibling = {
+                keys: child.keys.slice(this.config.order),
+                values: child.values.slice(this.config.order),
+              };
+              newKey = sibling.keys[0];
+              
+              child.values = child.values.slice(0, this.config.order);
+            }
+
+            child.keys = child.keys.slice(0, this.config.order);
+
+            node.keys.splice(idx, 0, newKey);
+
+            this.tx.write(sibling);
+            node.children$.splice(idx + 1, 0, sibling[PTR]);
           }
 
-          child.keys = child.keys.slice(0, this.config.order);
-
-          node.keys.splice(idx, 0, newKey);
-
-          this.tx.write(sibling);
-          node.children$.splice(idx + 1, 0, sibling[PTR]);
+          this.tx.write(child);
+          replaceChild(node.children$, idx, child[PTR], this.tx);
         }
 
-        this.tx.write(child);
-        replaceChild(node.children$, idx, child[PTR], this.tx);
-
-        return { node, idx, oldValue };
+        return { node, idx, oldValue, changed };
       });
     } else {
       let oldValue;
+      let changed = true;
       if (equal)  {
         if (type === "insert")
           throw new Error(`Key '${key}' already in tree.`);
         oldValue = node.values[idx];
-        node.values[idx] = value;
+        if (this.equalValue(value, oldValue)) {
+          changed = false;
+        } else {
+          node.values[idx] = value;
+        }
       } else {
         if (type === "update")
           throw new Error(`Key '${key}' not found.`);
         node.keys.splice(idx, 0, key);
         node.values.splice(idx, 0, value);
       }
-      return Promise.resolve({ node, idx, oldValue });
+      return Promise.resolve({ node, idx, oldValue, changed });
     }
   }
 
   /**
-   * Deletes the entry with the given key, rejecting if the key is not present.
+   * Deletes the entry with the given key.
    * @param {*} key The key.
-   * @returns {Promise} Resolves to the new tree.
+   * @returns {Promise} Resolves to the old value associated with the key or undefined if not present.
    */
   delete(key) {
     if (this.rootPtr === undefined)
@@ -359,12 +393,10 @@ class Tree {
     return this.delete_(key, this.tx.rootPtr).then(({ rootPtr, oldValue }) => {
       if (oldValue === undefined) {
         this.rootPtr = this.tx.rollback();
-        this.tx = oldTx;
-        return;
+      } else {
+        this.tx.commit();
+        this.rootPtr = rootPtr;
       }
-
-      this.tx.commit();
-      this.rootPtr = rootPtr;
       this.tx = oldTx;
       return oldValue;
     }).catch(error => {
@@ -479,9 +511,9 @@ class Tree {
   }
 
   /**
-   * Deletes the entry with the given key, rejecting if the key is not present.
-   * @param {*} key The key.
-   * @returns {Promise} Resolves to the new tree.
+   * Performs multiple set and delete operations.
+   * @param {Array.<Array.<*>>} items Array of [key, value] pairs. Where value is defined, key and value are set. Where value is undefined, key is deleted.
+   * @returns {Promise} Resolves on completion.
    */
   bulk(items) {
     if (this.rootPtr === undefined)
@@ -503,7 +535,7 @@ class Tree {
   bulk_(items, rootPtr) {
     // Sorting is optional but makes node caching by the backing store more effective. Sort must be stable,
     // otherwise operations on the same key could be reordered.
-    items = stable(items, (a, b) => this.cmp(a[0], b[0]));
+    items = stable(items, (a, b) => this.cmpKey(a[0], b[0]));
     
     let chain = Promise.resolve({ rootPtr });
     items.forEach(item => {
@@ -584,7 +616,7 @@ class Tree {
     } else {
       for (; i < node.values.length; ++i) {
         let key = node.keys[i];
-        if (this.cmp(key, upper) > 0)
+        if (this.cmpKey(key, upper) > 0)
           break;
         let value = node.values[i];
         if (cb.call(context, value, key) === Tree.BREAK)
@@ -599,7 +631,7 @@ class Tree {
     if (node.children$) {
       while (low < high) {
         let mid = (low + high) >>> 1;
-        let cmp = this.cmp(node.keys[mid], key);
+        let cmp = this.cmpKey(node.keys[mid], key);
         if (cmp <= 0)
           low = mid + 1;
         else
@@ -608,7 +640,7 @@ class Tree {
     } else {
       while (low < high) {
         let mid = (low + high) >>> 1;
-        let cmp = this.cmp(node.keys[mid], key);
+        let cmp = this.cmpKey(node.keys[mid], key);
         if (cmp < 0)
           low = mid + 1;
         else
@@ -616,7 +648,7 @@ class Tree {
       }
     }
 
-    let equal = high < node.keys.length && this.cmp(node.keys[high], key) === 0;
+    let equal = high < node.keys.length && this.cmpKey(node.keys[high], key) === 0;
     return { idx: high, equal };
   }
 

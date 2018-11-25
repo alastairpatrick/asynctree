@@ -224,6 +224,24 @@ fileStoreFactory.after = (store) => {
         });
       })
 
+      it("redundant update", function() {
+        let tree = Tree.empty(this.store);
+        return tree.insert(1, 30).then(() => {
+          return tree.update(1, 30);
+        }).then(value => {
+          expect(value).to.equal(30);
+          return tree.update(1, 30);
+        }).then(value => {
+          expect(value).to.equal(30);
+          return serializeTree(this.store, tree.rootPtr);
+        }).then(tree => {
+          expect(tree).to.deep.equal({
+            keys: [1],
+            values: [30],
+          });
+        });
+      })
+
       it("exception on attempt to add key that already exists", function() {
         let tree = Tree.empty(this.store);
         return tree.insert(1, 30).then(() => {
@@ -1143,8 +1161,8 @@ fileStoreFactory.after = (store) => {
 
           let changes = [];
           for (let j = 0; j < 1000; ++j) {
-            let key = Math.random().toString(16).substring(2, 6);
-            let value = Math.random().toString(36).substring(2);
+            let key = Math.random().toString(16).substring(2, 4);
+            let value = Math.random().toString(36).substring(2, 4);
             changes.push([key, value]);
           }
           let promise = tree.bulk(changes);
@@ -1173,8 +1191,8 @@ fileStoreFactory.after = (store) => {
           if (i % 1000 === 0)
             console.log(i);
 
-          let key = Math.random().toString(16).substring(2, 6);
-          let value = Math.random().toString(36).substring(2);
+          let key = Math.random().toString(16).substring(2, 4);
+          let value = Math.random().toString(36).substring(2, 4);
 
           let promise;
           if (i % 3 === 0)
