@@ -418,7 +418,7 @@ class Tree {
       throw error;
     });
   }
-
+  
   delete_(key, rootPtr) {
     return this.tx.read(rootPtr).then(node => {
       node = cloneNode(node);
@@ -645,16 +645,27 @@ class Tree {
         outsideUpper = (k) => false;
       }
   
-      for (; i < node.values.length; ++i) {
+      const processValues = () => {
+        if (i >= node.keys.length) {
+          return;
+        }
         let key = node.keys[i];
         if (outsideUpper(key)) {
-          break;
+          return;
         }
         let value = node.values[i];
-        if (cb.call(context, value, key) === Tree.BREAK) {
-          return Tree.BREAK;
-        }
+        ++i;
+
+        return Promise.resolve(cb.call(context, value, key)).then(result => {
+          if (result === Tree.BREAK) {
+            return Tree.BREAK;
+          } else {
+            return processValues();
+          }
+        });
       }
+
+      return processValues();
     }
   }
 

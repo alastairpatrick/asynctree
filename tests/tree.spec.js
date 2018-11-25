@@ -999,7 +999,7 @@ fileStoreFactory.after = (store) => {
         });
       })
 
-      it("finds many records until callback rteturns STOP", function() {
+      it("finds many records until callback rteturns BREAK", function() {
         let results = [];
         return deserializeTree(this.store, {
           keys: [9, 13, 16],
@@ -1164,6 +1164,40 @@ fileStoreFactory.after = (store) => {
       });
     })
 
+    it("rangeEach callback may return promise", function() {
+      let results = [];
+      return deserializeTree(this.store, {
+        keys: [9, 13, 16],
+        children$: [{
+          keys: [1, 4],
+          values: [1, 4],
+        }, {
+          keys: [9, 10, 11],
+          values: [9, 10, 11],
+        }, {
+          keys: [13, 15],
+          values: [13, 15],
+        }, {
+          keys: [16, 20, 25],
+          values: [16, 20, 25],
+        }],
+      }).then(ptr => {
+        let tree = new Tree(this.store, { rootPtr$: ptr });
+        return tree.rangeEach(new Range(10, 16), (value, key) => new Promise((resolve, reject) => {
+          results.push([key, value]);
+          resolve(undefined);
+        }));
+      }).then(() => {
+        expect(results).to.deep.equal([
+          [10, 10],
+          [11, 11],
+          [13, 13],
+          [15, 15],
+          [16, 16],
+        ]);
+      });
+    })
+  
     describe("forEachPtr", function() {
       it("iterates over all pointers", function() {
         let results = [];
